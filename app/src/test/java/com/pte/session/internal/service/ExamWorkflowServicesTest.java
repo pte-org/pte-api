@@ -451,6 +451,25 @@ class ExamWorkflowServicesTest {
     }
 
     @Test
+    void publish_whenEveryStudentSitsAnotherExamThen_isBlockedBeforeAnyoneIsEnrolled() {
+        ExamSession session = readyPublishSession();
+        UUID studentId = UUID.randomUUID();
+        stubPublishDependencies(session, List.of(audienceMember(session, studentId)));
+        var clash = org.mockito.Mockito.mock(
+                com.pte.session.internal.repository.ExamRegistrationRepository.SlotConflictProjection.class);
+        when(clash.getStudentPublicId()).thenReturn(studentId);
+        when(registrationRepository.findConflictingEnrollments(eq(tenantId), eq(List.of(studentId)), any(), any()))
+                .thenReturn(List.of(clash));
+
+        assertThatThrownBy(() -> publishService.publish(session.getPublicId(), hostAdmin))
+                .isInstanceOf(com.pte.session.internal.exception.draft.ExamPublishBlockedException.class)
+                .satisfies(error -> assertThat(((com.pte.session.internal.dto.response.ExamPreflightResponse)
+                        ((DomainException) error).getData()).issues())
+                        .contains(SessionConstants.PREFLIGHT_AUDIENCE_ALL_TIME_CONFLICT));
+        verify(enrollmentService, never()).bulkEnrollPublishedExam(any(), any());
+    }
+
+    @Test
     void publish_allConflictsKeepsSessionReadyAndReturnsConflict() {
         ExamSession session = readyPublishSession();
         UUID studentId = UUID.randomUUID();

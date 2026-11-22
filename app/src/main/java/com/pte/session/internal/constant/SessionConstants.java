@@ -133,6 +133,8 @@ public final class SessionConstants {
     public static final String PREFLIGHT_AUDIENCE_EMPTY = "AUDIENCE_EMPTY";
     public static final String PREFLIGHT_AUDIENCE_NO_ELIGIBLE = "AUDIENCE_NO_ELIGIBLE";
     public static final String PREFLIGHT_AUDIENCE_CONFLICT_BLOCKED = "AUDIENCE_CONFLICT_BLOCKED";
+    /** Every eligible student already sits another exam at this time, so publishing would leave nobody enrolled. */
+    public static final String PREFLIGHT_AUDIENCE_ALL_TIME_CONFLICT = "AUDIENCE_ALL_TIME_CONFLICT";
     public static final String AGGREGATE_EXAM_SESSION = "ExamSession";
     public static final String EVENT_EXAM_DRAFT_CREATED = "ExamDraftCreated";
     public static final String EVENT_EXAM_DRAFT_UPDATED = "ExamDraftUpdated";
