@@ -5,6 +5,7 @@ import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.itembank.TaskRuntimeProfileDescriptor;
 import com.pte.itembank.TaskRuntimeProfileRegistry;
 import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.ScoringDomainConstants;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.domain.enums.ScoringAnswerStatus;
 import com.pte.scoring.internal.repository.AiEvaluationRepository;
@@ -185,6 +186,61 @@ class ScoringIngestServiceTest {
     }
 
     @Test
+    void ingestForSession_scoresABlankAiAnswerZeroWithoutQueuingAnyVendorWork() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        List<SubmittedAnswerView> views = List.of(
+                view(sessionPublicId, tenantId, "READ_ALOUD", null),
+                view(sessionPublicId, tenantId, "WRITE_ESSAY", "   "),
+                view(sessionPublicId, tenantId, "READ_ALOUD", ""));
+        when(attemptService.getSubmittedAnswersForSession(sessionPublicId, tenantId)).thenReturn(views);
+        when(evaluationRepository.findByAnswerPublicId(any())).thenReturn(Optional.empty());
+        ArgumentCaptor<AiEvaluation> saved = ArgumentCaptor.forClass(AiEvaluation.class);
+
+        service.ingestForSession(sessionPublicId, tenantId);
+
+        verify(evaluationRepository, times(3)).save(saved.capture());
+        assertThat(saved.getAllValues()).allSatisfy(evaluation -> {
+            assertThat(evaluation.getStatus()).isEqualTo(ScoringAnswerStatus.SCORED);
+            assertThat(evaluation.getScore()).isZero();
+            assertThat(evaluation.getAiProvider()).isEqualTo(ScoringDomainConstants.AI_BLANK_ANSWER_PROVIDER);
+            assertThat(evaluation.hasPublishableAiScore()).isTrue();
+            assertThat(evaluation.isScoredAsBlankAnswer()).isTrue();
+        });
+    }
+
+    @Test
+    void ingestForSession_leavesANonBlankAiAnswerPending() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        when(attemptService.getSubmittedAnswersForSession(sessionPublicId, tenantId))
+                .thenReturn(List.of(view(sessionPublicId, tenantId, "READ_ALOUD", "media-ref")));
+        when(evaluationRepository.findByAnswerPublicId(any())).thenReturn(Optional.empty());
+        ArgumentCaptor<AiEvaluation> saved = ArgumentCaptor.forClass(AiEvaluation.class);
+
+        service.ingestForSession(sessionPublicId, tenantId);
+
+        verify(evaluationRepository).save(saved.capture());
+        assertThat(saved.getValue().getStatus()).isEqualTo(ScoringAnswerStatus.PENDING);
+        assertThat(saved.getValue().isScoredAsBlankAnswer()).isFalse();
+    }
+
+    @Test
+    void ingestForSession_aBlankAnswerWithNoAiMethodIsNotTreatedAsABlankScore() {
+        UUID sessionPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        when(attemptService.getSubmittedAnswersForSession(sessionPublicId, tenantId))
+                .thenReturn(List.of(view(sessionPublicId, tenantId, "PERSONAL_INTRODUCTION", null)));
+        when(evaluationRepository.findByAnswerPublicId(any())).thenReturn(Optional.empty());
+        ArgumentCaptor<AiEvaluation> saved = ArgumentCaptor.forClass(AiEvaluation.class);
+
+        service.ingestForSession(sessionPublicId, tenantId);
+
+        verify(evaluationRepository).save(saved.capture());
+        assertThat(saved.getValue().isScoredAsBlankAnswer()).isFalse();
+    }
+
+    @Test
     void anEvaluationKeepsNoCopyOfTheSubmittedAnswerOrItsQuestion() {
         assertThat(Arrays.stream(AiEvaluation.class.getDeclaredFields()).map(Field::getName))
                 .doesNotContain("payload", "correctAnswerText", "optionsJson", "promptText", "referenceAnswerText",
@@ -192,9 +248,13 @@ class ScoringIngestServiceTest {
     }
 
     private static SubmittedAnswerView view(UUID sessionPublicId, UUID tenantId, String taskType) {
+        return view(sessionPublicId, tenantId, taskType, "payload");
+    }
+
+    private static SubmittedAnswerView view(UUID sessionPublicId, UUID tenantId, String taskType, String payload) {
         TaskRuntimeProfileDescriptor runtime = TaskRuntimeProfileRegistry.descriptorFor(taskType);
         return new SubmittedAnswerView(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), sessionPublicId,
-                tenantId, UUID.randomUUID(), taskType, "payload", null, null, false, null, null, null, null, null,
+                tenantId, UUID.randomUUID(), taskType, payload, null, null, false, null, null, null, null, null,
                 "SPEAKING", runtime, null, null, null, null);
     }
 }
