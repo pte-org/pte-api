@@ -51,6 +51,21 @@ class ScoringEligibilityQueryServiceTest {
     }
 
     @Test
+    void aBlankAnswerScoredZeroAtIngestIsNeverOfferedToAnExaminer() {
+        UUID session = UUID.randomUUID();
+        UUID tenant = UUID.randomUUID();
+        UUID attempt = UUID.randomUUID();
+        AiEvaluation blank = answer(tenant, session, "READ_ALOUD", ScoringMethod.AI_SPEECH, attempt);
+        blank.markBlankAnswer(java.time.Instant.now());
+        when(answerRepository.findBySessionPublicIdAndTenantId(session, tenant)).thenReturn(List.of(
+                blank, answer(tenant, session, "WRITE_ESSAY", ScoringMethod.AI_TEXT, attempt)));
+
+        List<AiEligibleAttemptView> result = service.findEligibleAttempts(session, tenant, null);
+
+        assertThat(result).containsExactly(new AiEligibleAttemptView(attempt, 1));
+    }
+
+    @Test
     void emptyAttemptFilterDoesNotAccidentallyExpandToTheWholeSession() {
         assertThat(service.findEligibleAttempts(UUID.randomUUID(), UUID.randomUUID(), List.of())).isEmpty();
         verify(answerRepository, never()).findBySessionPublicIdAndTenantId(
