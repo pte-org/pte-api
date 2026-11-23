@@ -1,5 +1,6 @@
 package com.pte.session.internal.service.draft;
 
+import com.pte.session.internal.exception.capacity.SessionTimeConflictException;
 import com.pte.session.internal.service.ExamSessionAccess;
 import com.pte.session.internal.service.SessionLifecycleService;
 import com.pte.billing.BillingService;
@@ -77,6 +78,11 @@ public class ExamDraftService {
         validateWindow(request.opensAt(), request.closesAt());
         SubscriptionView subscription = access.lockedActiveSubscription(request.subscriptionPublicId(), tenantId);
         validateSubscriptionWindowAndCapacity(subscription, request.opensAt(), request.closesAt(), request.capacity());
+        // Refuse before anything is saved: otherwise the clash only shows at publish and the draft is left behind.
+        sessionRepository.findFirstOverlapping(subscription.publicId(), request.opensAt(), request.closesAt(), null)
+                .ifPresent(conflict -> {
+                    throw new SessionTimeConflictException(conflict.getPublicId(), conflict.getName());
+                });
         var template = examDefinitionService.findActiveForTenant(request.examDefinitionPublicId(), tenantId)
                 .orElseThrow(() -> new ExamDraftConfigurationException(SessionConstants.EXAM_TEMPLATE_ACTIVE_REQUIRED));
 
@@ -225,7 +231,9 @@ public class ExamDraftService {
     @Transactional
     public void deleteDraft(UUID sessionPublicId, CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller);
-        if (session.getStatus() != SessionStatus.DRAFT) {
+        // READY is generated but never published: nobody is enrolled yet, so it can go like a draft. This is also
+        // how the create wizard cleans up when publishing fails after the questions were generated.
+        if (session.getStatus() != SessionStatus.DRAFT && session.getStatus() != SessionStatus.READY) {
             throw new ExamDraftNotDeletableException();
         }
         session.setDeleted(true);
