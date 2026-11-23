@@ -452,22 +452,18 @@ class EnrollmentServiceTest {
     }
 
     @Test
-    void bulkEnroll_afterExamClosed_enrollsWithoutNotifying() {
+    void bulkEnroll_afterExamClosed_isLocked() {
         UUID tenantId = UUID.randomUUID();
         UUID sessionPublicId = UUID.randomUUID();
         ExamSession session = session(1L, sessionPublicId, tenantId);
         session.setStatus(SessionStatus.CLOSED);
         CurrentUser caller = hostAdmin(tenantId);
-        UUID newId = UUID.randomUUID();
-
         when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
-        when(registrationRepository.findBySessionIdAndStudentPublicIdIn(eq(1L), any())).thenReturn(List.of());
-        when(registrationRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        BulkEnrollResponse response = enrollmentService.bulkEnroll(sessionPublicId,
-                new BulkEnrollRequest(List.of(newId)), caller);
-
-        assertThat(response.enrolled()).containsExactly(newId);
+        assertThatThrownBy(() -> enrollmentService.bulkEnroll(sessionPublicId,
+                new BulkEnrollRequest(List.of(UUID.randomUUID())), caller))
+                .isInstanceOf(ExamAudienceLockedException.class);
+        verify(registrationRepository, never()).saveAll(any());
         verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 
@@ -512,7 +508,7 @@ class EnrollmentServiceTest {
         UUID enrollmentPublicId = UUID.randomUUID();
         UUID studentPublicId = UUID.randomUUID();
         ExamSession session = session(1L, sessionPublicId, tenantId);
-        session.setStatus(SessionStatus.CLOSED);
+        session.setStatus(SessionStatus.SCHEDULED);
         CurrentUser caller = hostAdmin(tenantId);
 
         ExamRegistration enrollment = new ExamRegistration();

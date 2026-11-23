@@ -99,6 +99,10 @@ public final class IdentityConstants {
     public static final String DATE_OF_BIRTH_NOT_IN_FUTURE = "Date of birth cannot be in the future";
     public static final String PASSWORD_REQUIRED = "Password is required";
     public static final String PASSWORD_MIN_LENGTH = "Password must be at least 8 characters";
+    /** A space at either end is almost always a copy-paste slip that later makes the password impossible to type. */
+    public static final String PASSWORD_EDGE_SPACES = "Password must not start or end with a space";
+    /** No whitespace at the start or end; anything in between is allowed. */
+    public static final String PASSWORD_NO_EDGE_SPACES_REGEX = "^(?!\\s)[\\s\\S]*(?<!\\s)$";
     /** BCrypt refuses more than 72 bytes; the limit is in UTF-8 bytes, so accented characters count for more. */
     public static final int PASSWORD_MAX_BYTES = 72;
     public static final String PASSWORD_TOO_LONG = "Password must be at most 72 bytes (about 72 plain characters, fewer with accents)";
