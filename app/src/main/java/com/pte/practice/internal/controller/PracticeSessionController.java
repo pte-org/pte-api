@@ -11,14 +11,12 @@ import com.pte.practice.internal.dto.response.mocktest.PracticeMockTestScoringRe
 import com.pte.practice.internal.dto.response.media.PracticeRecordingPlaybackResponse;
 import com.pte.practice.internal.dto.response.PracticeReviewResponse;
 import com.pte.practice.internal.dto.response.PracticeSessionResponse;
-import com.pte.practice.internal.service.PracticeEntitlementService;
 import com.pte.practice.internal.service.PracticeRecordingPlaybackService;
 import com.pte.practice.internal.service.PracticeReviewService;
 import com.pte.practice.internal.service.session.PracticeScoringRequestService;
 import com.pte.practice.internal.service.session.PracticeSessionDiscardService;
 import com.pte.practice.internal.service.session.PracticeSessionFinishService;
 import com.pte.practice.internal.service.session.PracticeSessionService;
-import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import jakarta.validation.Valid;
@@ -47,30 +45,16 @@ public class PracticeSessionController {
     private final PracticeScoringRequestService scoringRequestService;
     private final PracticeSessionDiscardService discardService;
     private final PracticeSessionFinishService finishService;
-    private final PracticeEntitlementService entitlementService;
 
     public PracticeSessionController(PracticeSessionService sessionService, PracticeReviewService reviewService,
             PracticeRecordingPlaybackService playbackService, PracticeScoringRequestService scoringRequestService,
-            PracticeSessionDiscardService discardService, PracticeSessionFinishService finishService,
-            PracticeEntitlementService entitlementService) {
+            PracticeSessionDiscardService discardService, PracticeSessionFinishService finishService) {
         this.sessionService = sessionService;
         this.reviewService = reviewService;
         this.playbackService = playbackService;
         this.scoringRequestService = scoringRequestService;
         this.discardService = discardService;
         this.finishService = finishService;
-        this.entitlementService = entitlementService;
-    }
-
-    /**
-     * The caller, refused when practice is locked for them. The commands check this for themselves further down;
-     * reading a session, its answers or a recording is checked here, so a suspended student stops seeing their
-     * practice as soon as the host suspends them rather than when their access token runs out.
-     */
-    private CurrentUser unlockedCaller() {
-        CurrentUser caller = CurrentUserContext.required();
-        entitlementService.assertUnlocked(caller, caller.tenantId());
-        return caller;
     }
 
     @PostMapping
@@ -83,7 +67,7 @@ public class PracticeSessionController {
 
     @GetMapping("/{publicId}")
     public ApiResponse<PracticeSessionResponse> get(@PathVariable UUID publicId) {
-        return ApiResponse.success(sessionService.get(publicId, unlockedCaller()));
+        return ApiResponse.success(sessionService.get(publicId, CurrentUserContext.required()));
     }
 
     @PostMapping("/{publicId}/begin")
@@ -122,7 +106,8 @@ public class PracticeSessionController {
     public ApiResponse<PracticeItemResultResponse> result(
             @PathVariable UUID publicId,
             @PathVariable UUID itemPublicId) {
-        return ApiResponse.success(sessionService.itemResult(publicId, itemPublicId, unlockedCaller()));
+        return ApiResponse.success(sessionService.itemResult(publicId, itemPublicId,
+                CurrentUserContext.required()));
     }
 
     /** "Chấm điểm" on one submitted speaking or writing answer of a task or skill session. */
@@ -167,7 +152,7 @@ public class PracticeSessionController {
     public ApiResponse<PracticeRecordingPlaybackResponse> recording(
             @PathVariable UUID publicId,
             @PathVariable UUID itemPublicId) {
-        return ApiResponse.success(playbackService.playback(publicId, itemPublicId, unlockedCaller()));
+        return ApiResponse.success(playbackService.playback(publicId, itemPublicId, CurrentUserContext.required()));
     }
 
     /** Saves the current item's work without leaving the session (a finished or re-done recording). */
@@ -184,17 +169,17 @@ public class PracticeSessionController {
 
     @GetMapping("/{publicId}/review")
     public ApiResponse<PracticeReviewResponse> review(@PathVariable UUID publicId) {
-        return ApiResponse.success(reviewService.get(publicId, unlockedCaller()));
+        return ApiResponse.success(reviewService.get(publicId, CurrentUserContext.required()));
     }
 
     @PostMapping("/{publicId}/discard")
     public ApiResponse<Boolean> discard(@PathVariable UUID publicId) {
-        return ApiResponse.success(discardService.exitWithoutSaving(publicId, unlockedCaller()));
+        return ApiResponse.success(discardService.exitWithoutSaving(publicId, CurrentUserContext.required()));
     }
 
     @PostMapping("/{publicId}/finish")
     public ApiResponse<Boolean> finish(@PathVariable UUID publicId) {
-        return ApiResponse.success(finishService.finish(publicId, unlockedCaller()));
+        return ApiResponse.success(finishService.finish(publicId, CurrentUserContext.required()));
     }
 
     @PostMapping("/{publicId}/save-and-exit")

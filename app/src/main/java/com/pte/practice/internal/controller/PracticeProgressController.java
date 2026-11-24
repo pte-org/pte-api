@@ -2,9 +2,7 @@ package com.pte.practice.internal.controller;
 
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.dto.response.PracticeProgressResponse;
-import com.pte.practice.internal.service.PracticeEntitlementService;
 import com.pte.practice.internal.service.PracticeProgressService;
-import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
 import com.pte.shared.web.ApiResponse;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -21,19 +19,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class PracticeProgressController {
 
     private final PracticeProgressService progressService;
-    private final PracticeEntitlementService entitlementService;
 
-    public PracticeProgressController(PracticeProgressService progressService,
-            PracticeEntitlementService entitlementService) {
+    public PracticeProgressController(PracticeProgressService progressService) {
         this.progressService = progressService;
-        this.entitlementService = entitlementService;
     }
 
-    /** The history is the student's own work, so a student practice is locked for no longer reads it. */
     @GetMapping
     public ApiResponse<PracticeProgressResponse> progress() {
-        CurrentUser caller = CurrentUserContext.required();
-        entitlementService.assertUnlocked(caller, caller.tenantId());
-        return ApiResponse.success(progressService.getProgress(caller.userId()));
+        return ApiResponse.success(progressService.getProgress(CurrentUserContext.required().userId()));
     }
 }
