@@ -32,6 +32,9 @@ public final class SessionConstants {
     public static final String SESSION_NOT_STARTED = "SESSION_NOT_STARTED";
     public static final String SESSION_NOT_STARTED_FRIENDLY =
             "This exam has not opened yet. Please come back at the scheduled start time.";
+    public static final String ATTENDANCE_REQUIRED = "ATTENDANCE_REQUIRED";
+    public static final String ATTENDANCE_REQUIRED_FRIENDLY =
+            "Your proctor has not checked you in yet. Please wait for check-in, then try again.";
     public static final String SESSION_CLOSED = "SESSION_CLOSED";
     public static final String SESSION_CLOSED_FRIENDLY =
             "This exam has already closed.";

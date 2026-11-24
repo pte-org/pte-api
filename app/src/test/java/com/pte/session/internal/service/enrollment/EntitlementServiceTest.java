@@ -2,9 +2,11 @@ package com.pte.session.internal.service.enrollment;
 
 import com.pte.session.domain.ExamPolicy;
 import com.pte.session.domain.ExamSession;
+import com.pte.session.domain.enums.AttendanceStatus;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.response.EntitlementResponse;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
+import com.pte.session.internal.exception.enrollment.AttendanceRequiredException;
 import com.pte.session.internal.exception.enrollment.InvalidSessionCodeException;
 import com.pte.session.internal.exception.enrollment.NotEntitledException;
 import com.pte.session.internal.exception.staff.ProctorNotAssignedException;
@@ -29,12 +31,15 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.EnumSet;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -173,6 +178,65 @@ class EntitlementServiceTest {
 
         assertThatThrownBy(() -> entitlementService.checkEntitlement(session.getPublicId(), STUDENT_ID))
                 .isInstanceOf(NotEntitledException.class);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = AttendanceStatus.class, names = {"PRESENT", "LATE"})
+    void checkEntitlement_supervisedSessionAndStudentCheckedIn_returnsEntitlement(AttendanceStatus status) {
+        ExamSession session = enrolledSession();
+        when(proctorRepository.existsBySessionIdAndDeletedFalse(1L)).thenReturn(true);
+        when(registrationRepository.existsBySessionIdAndStudentPublicIdAndStatusAndAttendanceStatusIn(
+                eq(1L), eq(STUDENT_ID), eq(AudienceMemberStatus.ENROLLED),
+                argThat(statuses -> statuses.contains(status)))).thenReturn(true);
+
+        assertThat(entitlementService.checkEntitlement(session.getPublicId(), STUDENT_ID).sessionPublicId())
+                .isEqualTo(session.getPublicId());
+    }
+
+    @Test
+    void checkEntitlement_supervisedSessionAndStudentNotCheckedIn_throwsAttendanceRequired() {
+        ExamSession session = enrolledSession();
+        when(proctorRepository.existsBySessionIdAndDeletedFalse(1L)).thenReturn(true);
+        when(registrationRepository.existsBySessionIdAndStudentPublicIdAndStatusAndAttendanceStatusIn(
+                eq(1L), eq(STUDENT_ID), eq(AudienceMemberStatus.ENROLLED), any())).thenReturn(false);
+
+        assertThatThrownBy(() -> entitlementService.checkEntitlement(session.getPublicId(), STUDENT_ID))
+                .isInstanceOf(AttendanceRequiredException.class);
+    }
+
+    @Test
+    void checkEntitlement_attendanceGateAcceptsOnlyPresentAndLate() {
+        ExamSession session = enrolledSession();
+        when(proctorRepository.existsBySessionIdAndDeletedFalse(1L)).thenReturn(true);
+        when(registrationRepository.existsBySessionIdAndStudentPublicIdAndStatusAndAttendanceStatusIn(
+                eq(1L), eq(STUDENT_ID), eq(AudienceMemberStatus.ENROLLED), any())).thenReturn(false);
+
+        assertThatThrownBy(() -> entitlementService.checkEntitlement(session.getPublicId(), STUDENT_ID))
+                .isInstanceOf(AttendanceRequiredException.class);
+
+        verify(registrationRepository).existsBySessionIdAndStudentPublicIdAndStatusAndAttendanceStatusIn(
+                eq(1L), eq(STUDENT_ID), eq(AudienceMemberStatus.ENROLLED),
+                eq(EnumSet.of(AttendanceStatus.PRESENT, AttendanceStatus.LATE)));
+    }
+
+    @Test
+    void checkEntitlement_sessionWithoutProctor_doesNotRequireAttendance() {
+        ExamSession session = enrolledSession();
+        when(proctorRepository.existsBySessionIdAndDeletedFalse(1L)).thenReturn(false);
+
+        assertThat(entitlementService.checkEntitlement(session.getPublicId(), STUDENT_ID).sessionPublicId())
+                .isEqualTo(session.getPublicId());
+        verify(registrationRepository, never()).existsBySessionIdAndStudentPublicIdAndStatusAndAttendanceStatusIn(
+                any(), any(), any(), any());
+    }
+
+    @Test
+    void checkEntitlement_notCheckedInButSessionNotOpen_reportsSessionStateFirst() {
+        ExamSession session = enrolledSession();
+        session.setStatus(SessionStatus.SCHEDULED);
+
+        assertThatThrownBy(() -> entitlementService.checkEntitlement(session.getPublicId(), STUDENT_ID))
+                .isInstanceOf(SessionNotStartedException.class);
     }
 
     private ExamSession enrolledSession() {
