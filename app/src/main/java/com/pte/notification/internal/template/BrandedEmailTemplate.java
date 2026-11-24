@@ -13,8 +13,11 @@ import static com.pte.notification.internal.template.EmailLayout.escape;
 import static com.pte.notification.internal.template.EmailLayout.fallbackLink;
 import static com.pte.notification.internal.template.EmailLayout.fields;
 import static com.pte.notification.internal.template.EmailLayout.heading;
+import static com.pte.notification.internal.template.EmailLayout.mailtoLink;
 import static com.pte.notification.internal.template.EmailLayout.page;
 import static com.pte.notification.internal.template.EmailLayout.paragraph;
+import static com.pte.notification.internal.template.EmailLayout.steps;
+import static com.pte.notification.internal.template.EmailLayout.summary;
 
 /**
  * PTE Prep's card e-mails, in English and short enough to read without scrolling: logo, a few lines, copy-friendly
@@ -67,7 +70,7 @@ public final class BrandedEmailTemplate {
                 + paragraph(BODY, "A temporary password was set for your " + BRAND + " account. Sign in with the"
                         + " details below and <strong>change it right away</strong>.")
                 + fields(new String[][] {{"Username", username}, {"Temporary password", temporaryPassword}})
-                + paragraph(MUTED, "Did not expect this? Contact your centre or administrator.");
+                + paragraph(MUTED, "Did not expect this? Contact your center or administrator.");
 
         String text = BRAND + "\n\n"
                 + (named ? "Hello " + fullName + ",\n" : "Hello,\n")
@@ -110,16 +113,17 @@ public final class BrandedEmailTemplate {
                 + paragraph(BODY, "Dear " + escape(organizationName) + " team,")
                 + paragraph(BODY, "Thank you for choosing " + BRAND + ". We have received your onboarding request with"
                         + " the details below.")
-                + fields(new String[][] {{"Organization", organizationName}, {"Requested tenant code", requestedCode}})
+                + summary(new String[][] {{"Organization", organizationName, "text"},
+                        {"Requested tenant code", requestedCode, "mono"}, {"Status", "Pending review", "badge"}})
                 + paragraph(BODY, "<strong>What happens next</strong>")
-                + paragraph(BODY, "&bull; <strong>Review:</strong> our team is checking your details and will reply"
-                        + " within <strong>" + responseHours + " hours</strong>.<br>"
-                        + "&bull; <strong>Account setup:</strong> once approved, we will email you the Host Admin"
-                        + " sign-in details so you can set up your centre.")
-                + (hasSupport ? paragraph(MUTED, "Questions, or need to change your application? Write to "
-                        + "<a href=\"mailto:" + escape(supportEmail) + "\" style=\"color:" + BODY + ";\">"
-                        + escape(supportEmail) + "</a>.") : "")
-                + paragraph(MUTED, "Warm regards,<br>The " + BRAND + " team");
+                + steps(new String[][] {
+                        {"Review:", "our team is checking your details and will reply within <strong>"
+                                + responseHours + " hours</strong>."},
+                        {"Account setup:", "once approved, we will email you the Host Admin sign-in details so you"
+                                + " can set up your center."}})
+                + (hasSupport ? paragraph(BODY, "Questions, or need to change your application? Write to "
+                        + mailtoLink(supportEmail) + ".") : "")
+                + paragraph(BODY, "Warm regards,<br>The " + BRAND + " team");
 
         String text = BRAND + "\n\nApplication received\n\n"
                 + "Dear " + organizationName + " team,\n\n"
@@ -130,7 +134,7 @@ public final class BrandedEmailTemplate {
                 + "What happens next\n"
                 + "- Review: our team is checking your details and will reply within " + responseHours + " hours.\n"
                 + "- Account setup: once approved, we will email you the Host Admin sign-in details so you can set up"
-                + " your centre.\n"
+                + " your center.\n"
                 + (hasSupport ? "\nQuestions, or need to change your application? Write to " + supportEmail + ".\n" : "")
                 + "\nWarm regards,\nThe " + BRAND + " team\n";
 

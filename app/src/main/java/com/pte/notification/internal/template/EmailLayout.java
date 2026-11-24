@@ -159,6 +159,62 @@ final class EmailLayout {
         return html.append("</table>").toString();
     }
 
+    /**
+     * One grey card of label and value rows split by hairlines. A row's third element picks how its value looks:
+     * {@code "text"} (bold sans-serif), {@code "mono"} (an identifier the reader may copy) or {@code "badge"} (a
+     * status pill). Values are escaped here.
+     */
+    static String summary(String[][] rows) {
+        StringBuilder html = new StringBuilder("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\""
+                + " cellspacing=\"0\" border=\"0\" bgcolor=\"" + PAGE + "\" style=\"margin:0 0 18px;"
+                + "background-color:" + PAGE + ";border:1px solid " + RULE + ";border-radius:6px;\">");
+        for (int i = 0; i < rows.length; i++) {
+            String rule = i == 0 ? "" : "border-top:1px solid " + RULE + ";";
+            html.append("<tr><td width=\"38%\" valign=\"top\" style=\"padding:10px 14px;").append(rule)
+                    .append("font-family:").append(FONT).append(";font-size:13px;line-height:20px;color:")
+                    .append(MUTED).append(";\">").append(escape(rows[i][0])).append("</td><td valign=\"top\""
+                            + " style=\"padding:10px 14px;").append(rule).append(summaryValue(rows[i][1], rows[i][2]))
+                    .append("</td></tr>");
+        }
+        return html.append("</table>").toString();
+    }
+
+    private static String summaryValue(String value, String kind) {
+        return switch (kind) {
+            case "mono" -> "font-family:" + MONO + ";font-size:14px;line-height:20px;font-weight:700;color:" + HEADING
+                    + ";word-break:break-all;\">" + plain(value);
+            case "badge" -> "\"><span style=\"display:inline-block;padding:2px 10px;border-radius:999px;"
+                    + "background-color:#fef3c7;font-family:" + FONT + ";font-size:12px;line-height:18px;"
+                    + "font-weight:700;color:#92400e;\">" + escape(value) + "</span>";
+            default -> "font-family:" + FONT + ";font-size:14px;line-height:20px;font-weight:700;color:" + HEADING
+                    + ";" + WRAP + "\">" + plain(value);
+        };
+    }
+
+    /**
+     * Numbered steps as a two-column table (number, text) so wrapped lines stay aligned in every mail client. Each
+     * item is {title, text}; the title is escaped and the text is an HTML fragment from the caller.
+     */
+    static String steps(String[][] items) {
+        StringBuilder html = new StringBuilder("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\""
+                + " cellspacing=\"0\" border=\"0\" style=\"margin:0 0 6px;\">");
+        for (int i = 0; i < items.length; i++) {
+            html.append("<tr><td width=\"28\" valign=\"top\" style=\"padding:0 0 10px;font-family:").append(FONT)
+                    .append(";font-size:14px;line-height:22px;font-weight:700;color:").append(BRAND_INK).append(";\">")
+                    .append(i + 1).append(".</td><td valign=\"top\" style=\"padding:0 0 10px;font-family:")
+                    .append(FONT).append(";font-size:14px;line-height:22px;color:").append(BODY).append(";")
+                    .append(WRAP).append("\"><strong style=\"color:").append(HEADING).append(";\">")
+                    .append(escape(items[i][0])).append("</strong> ").append(items[i][1]).append("</td></tr>");
+        }
+        return html.append("</table>").toString();
+    }
+
+    /** A mailto link in the brand colour, for addresses we configure ourselves. */
+    static String mailtoLink(String address) {
+        return "<a href=\"mailto:" + escape(address) + "\" style=\"color:" + BRAND_INK + ";font-weight:600;\">"
+                + escape(address) + "</a>";
+    }
+
     /** A short list of monospace lines in one bordered block, for identifiers the reader may copy. */
     static String lines(List<String> values) {
         StringBuilder html = new StringBuilder("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\""
