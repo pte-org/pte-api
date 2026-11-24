@@ -1,6 +1,7 @@
 package com.pte.practice.internal.controller;
 
 import com.pte.practice.internal.constant.PracticeConstants;
+import com.pte.practice.internal.dto.request.PracticeAvatarUpdateRequest;
 import com.pte.practice.internal.dto.request.PracticeProfileUpdateRequest;
 import com.pte.practice.internal.dto.response.profile.PracticeProfileResponse;
 import com.pte.practice.internal.service.PracticeProfileService;
@@ -31,6 +32,12 @@ public class PracticeProfileController {
     @GetMapping
     public ApiResponse<PracticeProfileResponse> getProfile() {
         return ApiResponse.success(profileService.get(CurrentUserContext.required()));
+    }
+
+    /** Its own path: choosing an avatar must never be able to touch the exam date that {@code PUT} above sets. */
+    @PutMapping(PracticeConstants.PRACTICE_PROFILE_AVATAR_SEGMENT)
+    public ApiResponse<PracticeProfileResponse> updateAvatar(@Valid @RequestBody PracticeAvatarUpdateRequest request) {
+        return ApiResponse.success(profileService.updateAvatar(CurrentUserContext.required(), request));
     }
 
     @PutMapping
