@@ -1,5 +1,6 @@
 package com.pte.billing.internal.service;
 
+import com.pte.billing.BillingSettingsService;
 import com.pte.billing.domain.enums.TenantApplicationStatus;
 import com.pte.billing.TenantApplicationApprovedEvent;
 import com.pte.billing.internal.dto.request.application.RejectApplicationRequest;
@@ -61,11 +62,15 @@ class TenantApplicationServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private BillingSettingsService billingSettingsService;
+
     private TenantApplicationService service;
 
     @BeforeEach
     void setUp() {
-        service = new TenantApplicationService(tenancyService, identityService, platformSettingService, eventPublisher, null);
+        service = new TenantApplicationService(tenancyService, identityService, platformSettingService, eventPublisher, null,
+                billingSettingsService);
     }
 
     private SubmitApplicationRequest submitRequest(String code) {
@@ -161,6 +166,21 @@ class TenantApplicationServiceTest {
         assertThat(response.publicId()).isEqualTo(applicationId);
         assertThat(response.status()).isEqualTo("PENDING");
         verify(tenancyService).findApplication(applicationId);
+    }
+
+    @Test
+    void get_pendingApplicationCarriesTheSlaDeadline() {
+        UUID applicationId = UUID.randomUUID();
+        Organization application = pendingApplication(applicationId, "acme");
+        Instant submitted = Instant.parse("2026-11-24T03:00:00Z");
+        org.springframework.test.util.ReflectionTestUtils.setField(application, "createdAt", submitted);
+        when(tenancyService.findApplication(applicationId)).thenReturn(Optional.of(application));
+        when(billingSettingsService.getTenantApplicationResponseSlaHours()).thenReturn(72);
+
+        TenantApplicationResponse response = service.get(applicationId);
+
+        assertThat(response.submittedAt()).isEqualTo(submitted);
+        assertThat(response.responseDueAt()).isEqualTo(submitted.plusSeconds(72 * 3600L));
     }
 
     private Organization pendingApplication(UUID publicId, String code) {

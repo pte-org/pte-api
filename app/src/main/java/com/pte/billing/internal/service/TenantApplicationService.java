@@ -1,5 +1,6 @@
 package com.pte.billing.internal.service;
 
+import com.pte.billing.BillingSettingsService;
 import com.pte.billing.TenantApplicationApprovedEvent;
 import com.pte.billing.TenantApplicationRejectedEvent;
 import com.pte.billing.TenantApplicationSubmittedEvent;
@@ -31,6 +32,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -45,6 +48,7 @@ public class TenantApplicationService {
     private final TenancyService tenancyService;
     private final IdentityService identityService;
     private final PlatformSettingService platformSettingService;
+    private final BillingSettingsService billingSettingsService;
     private final ApplicationEventPublisher eventPublisher;
     private final AuditLogService auditLogService;
 
@@ -52,12 +56,13 @@ public class TenantApplicationService {
     public TenantApplicationService(
             TenancyService tenancyService, IdentityService identityService,
             PlatformSettingService platformSettingService, ApplicationEventPublisher eventPublisher,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService, BillingSettingsService billingSettingsService) {
         this.tenancyService = tenancyService;
         this.identityService = identityService;
         this.platformSettingService = platformSettingService;
         this.eventPublisher = eventPublisher;
         this.auditLogService = auditLogService;
+        this.billingSettingsService = billingSettingsService;
     }
 
     /**
@@ -113,8 +118,18 @@ public class TenantApplicationService {
     public TenantApplicationResponse get(UUID applicationPublicId, CurrentUser caller) {
         requireOperation(caller, PlatformOperation.APPLICATION_READ, BillingConstants.AUDIT_APPLICATION_READ);
         return tenancyService.findApplication(applicationPublicId)
-                .map(TenantApplicationMapper::toResponse)
+                .map(this::withResponseDeadline)
                 .orElseThrow(TenantApplicationNotFoundException::new);
+    }
+
+    /** A pending application carries the moment its review SLA runs out; reviewed ones have no deadline. */
+    private TenantApplicationResponse withResponseDeadline(Organization application) {
+        if (!application.isPending() || application.getCreatedAt() == null) {
+            return TenantApplicationMapper.toResponse(application);
+        }
+        Instant dueAt = application.getCreatedAt()
+                .plus(Duration.ofHours(billingSettingsService.getTenantApplicationResponseSlaHours()));
+        return TenantApplicationMapper.toResponse(application, dueAt);
     }
 
     /**
