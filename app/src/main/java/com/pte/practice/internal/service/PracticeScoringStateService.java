@@ -12,6 +12,7 @@ import com.pte.practice.internal.messaging.PracticeScoringDispatcher;
 import com.pte.practice.internal.messaging.PracticeScoringJob;
 import com.pte.practice.internal.repository.PracticeResponseRepository;
 import com.pte.practice.internal.service.response.PracticeFeedbackReader;
+import com.pte.practice.internal.service.response.PracticeOptionVerdictReader;
 import com.pte.scoring.CriteriaScores;
 import com.pte.scoring.PracticeAiEvaluation;
 import com.pte.scoring.PracticeScoringFailure;
@@ -189,21 +190,20 @@ public class PracticeScoringStateService {
     public PracticeItemResultResponse resultOf(PracticeResponse item) {
         PracticeScoringStatus state = item.getScoringStatus();
         boolean scored = state == PracticeScoringStatus.SCORED;
-        boolean failed = state == PracticeScoringStatus.FAILED;
         CriteriaScores criteria = scored ? CriteriaScores.read(jsonMapper, item.getAiSubScoresJson())
                 : CriteriaScores.legacy(Map.of());
         return new PracticeItemResultResponse(item.getPublicId(), item.getTaskCode(), state,
                 scored ? scoreOf(item) : null,
-                scored ? item.getAiScoreStatus() : null,
-                criteria.traits(),
+                scored ? item.getAiScoreStatus() : null, criteria.traits(),
                 scored ? item.getAiFeedback() : null,
                 scored ? item.getAiTranscript() : null,
-                failed ? item.getScoringFailureCode() : null,
+                state == PracticeScoringStatus.FAILED ? item.getScoringFailureCode() : null,
                 isRetryable(item),
                 scored ? item.getAiScoredAt() : null,
                 maximaOf(criteria, item.getTaskCode()),
                 item.getStatus() == PracticeResponseStatus.ANSWERED ? item.getPromptText() : null,
-                scored ? PracticeFeedbackReader.read(jsonMapper, item.getAiDetailJson()) : null);
+                scored ? PracticeFeedbackReader.read(jsonMapper, item.getAiDetailJson()) : null,
+                scored ? PracticeOptionVerdictReader.read(jsonMapper, item) : null);
     }
 
     /** Only Pearson trait scores have a maximum to show; older 0-100 results stay raw numbers. */

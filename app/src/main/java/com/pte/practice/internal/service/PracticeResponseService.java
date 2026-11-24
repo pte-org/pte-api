@@ -12,6 +12,7 @@ import com.pte.practice.internal.domain.PracticeSession;
 import com.pte.practice.internal.domain.PracticeResponse;
 import com.pte.practice.internal.domain.enums.PracticeScoringStatus;
 import com.pte.practice.internal.domain.enums.PracticeResponseStatus;
+import com.pte.practice.internal.domain.enums.PracticeSessionKind;
 import com.pte.practice.internal.domain.enums.PracticeSessionStatus;
 import com.pte.practice.internal.dto.request.PracticeAnswerRequest;
 import com.pte.practice.internal.dto.response.PracticeItemResultResponse;
@@ -183,6 +184,17 @@ public class PracticeResponseService {
     /** Result of this item's scoring for the answer/poll response; null when scoring is not wired (unit tests). */
     public PracticeItemResultResponse resultOf(PracticeResponse item) {
         return scoringStateService == null ? null : scoringStateService.resultOf(item);
+    }
+
+    /**
+     * Like {@link #resultOf(PracticeResponse)}, but a mock test (an exam rehearsal) keeps the answer key to itself
+     * until the test is finished, even though its choice answers are scored on the spot.
+     */
+    public PracticeItemResultResponse resultOf(PracticeSession session, PracticeResponse item) {
+        PracticeItemResultResponse result = resultOf(item);
+        boolean rehearsing = session.effectiveKind() == PracticeSessionKind.MOCK_TEST
+                && session.getStatus() != PracticeSessionStatus.COMPLETED;
+        return result == null || !rehearsing ? result : result.withoutOptionVerdicts();
     }
 
     /** Repairs lost or stuck AI jobs of this session; called on every session read. */

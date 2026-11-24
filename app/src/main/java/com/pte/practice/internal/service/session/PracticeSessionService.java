@@ -165,7 +165,7 @@ public class PracticeSessionService {
         if (operationLedger.alreadyApplied(session, PracticeSessionOperationType.ANSWER, idempotencyKey, requestHash)) {
             PracticeResponse answered = itemService.findForUpdate(session, itemPublicId);
             itemService.recoverScoring(session, clock.instant());
-            return responseMapper.toResponse(session).withItemResult(itemService.resultOf(answered));
+            return responseMapper.toResponse(session).withItemResult(itemService.resultOf(session, answered));
         }
         stateGuard.requireLiveInProgress(session, request.clientVersion());
         Instant now = clock.instant();
@@ -174,7 +174,7 @@ public class PracticeSessionService {
         itemService.completeIfFinished(session, now);
         session.setLastActivityAt(now);
         operationLedger.recordOperation(session, PracticeSessionOperationType.ANSWER, idempotencyKey);
-        return stateGuard.saveAndMap(session).withItemResult(itemService.resultOf(item));
+        return stateGuard.saveAndMap(session).withItemResult(itemService.resultOf(session, item));
     }
 
     /**
@@ -186,7 +186,7 @@ public class PracticeSessionService {
         PracticeSession session = stateGuard.findOwned(publicId, caller.userId());
         PracticeResponse item = itemService.findForUpdate(session, itemPublicId);
         itemService.recoverScoring(session, item, clock.instant());
-        return itemService.resultOf(item);
+        return itemService.resultOf(session, item);
     }
 
     /** Re-submits a FAILED AI item (at most the configured retries); a SCORED item is final. */

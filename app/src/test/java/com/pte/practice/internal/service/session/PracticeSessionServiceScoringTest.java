@@ -56,7 +56,7 @@ class PracticeSessionServiceScoringTest {
         session.setId(42L);
         session.setTenantId(UUID.randomUUID());
         item = new PracticeResponse();
-        when(itemService.resultOf(item)).thenReturn(result);
+        when(itemService.resultOf(session, item)).thenReturn(result);
     }
 
     @Test
@@ -69,7 +69,7 @@ class PracticeSessionServiceScoringTest {
 
         var order = inOrder(itemService);
         order.verify(itemService).recoverScoring(session, item, NOW);
-        order.verify(itemService).resultOf(item);
+        order.verify(itemService).resultOf(session, item);
     }
 
     @Test
@@ -92,7 +92,7 @@ class PracticeSessionServiceScoringTest {
         assertThatThrownBy(() -> service.itemResult(sessionId, itemId, caller))
                 .isInstanceOf(PracticeSessionNotFoundException.class);
 
-        verify(itemService, never()).resultOf(any());
+        verify(itemService, never()).resultOf(any(), any());
     }
 
     @Test
