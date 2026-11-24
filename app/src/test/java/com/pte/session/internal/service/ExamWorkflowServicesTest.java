@@ -195,9 +195,8 @@ class ExamWorkflowServicesTest {
             return session;
         });
         var proctors = List.of(
-                new com.pte.session.internal.dto.request.AssignProctorRequest(UUID.randomUUID(),
-                        com.pte.session.domain.enums.ProctorRole.LEAD_PROCTOR),
-                new com.pte.session.internal.dto.request.AssignProctorRequest(UUID.randomUUID(), null));
+                new com.pte.session.internal.dto.request.AssignProctorRequest(UUID.randomUUID()),
+                new com.pte.session.internal.dto.request.AssignProctorRequest(UUID.randomUUID()));
 
         draftService.createDraft(new CreateExamDraftRequest(
                 "HK1 mock", templateId, subscriptionId, opensAt, closesAt, ExamMode.OFFICIAL_EXAM, null, "HK1-2026",

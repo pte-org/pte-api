@@ -4,9 +4,7 @@ import com.pte.session.internal.service.SessionLifecycleService;
 import com.pte.identity.IdentityService;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ExamSessionProctor;
-import com.pte.session.domain.enums.ProctorRole;
 import com.pte.session.internal.dto.request.AssignProctorRequest;
-import com.pte.session.internal.dto.request.UpdateProctorRoleRequest;
 import com.pte.session.internal.dto.response.proctor.ProctorAssignmentResponse;
 import com.pte.session.internal.exception.staff.ProctorAssignmentNotFoundException;
 import com.pte.session.internal.repository.ExamSessionProctorRepository;
@@ -81,10 +79,9 @@ class ProctorAssignmentServiceTest {
         });
 
         ProctorAssignmentResponse response = proctorService.assignProctor(sessionPublicId,
-                new AssignProctorRequest(proctorPublicId, null), caller);
+                new AssignProctorRequest(proctorPublicId), caller);
 
         assertThat(response.proctorPublicId()).isEqualTo(proctorPublicId);
-        assertThat(response.role()).isEqualTo(ProctorRole.ASSISTANT_PROCTOR);
     }
 
     @Test
@@ -99,7 +96,7 @@ class ProctorAssignmentServiceTest {
                 .requireActiveProctorInTenant(proctorPublicId, tenantId);
 
         assertThatThrownBy(() -> proctorService.assignProctor(sessionPublicId,
-                new AssignProctorRequest(proctorPublicId, null), caller))
+                new AssignProctorRequest(proctorPublicId), caller))
                 .isInstanceOf(IdentityService.IdentityNotEligibleException.class);
 
         verify(proctorRepository, never()).save(any());
@@ -107,22 +104,20 @@ class ProctorAssignmentServiceTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void assignAtCreation_savesEveryPickedProctorWithTheirRole() {
+    void assignAtCreation_savesEveryPickedProctor() {
         UUID tenantId = UUID.randomUUID();
         ExamSession session = session(1L, UUID.randomUUID(), tenantId);
-        UUID lead = UUID.randomUUID();
-        UUID assistant = UUID.randomUUID();
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
 
         proctorService.assignAtCreation(session, List.of(
-                new AssignProctorRequest(lead, ProctorRole.LEAD_PROCTOR),
-                new AssignProctorRequest(assistant, null)));
+                new AssignProctorRequest(first),
+                new AssignProctorRequest(second)));
 
         org.mockito.ArgumentCaptor<List<ExamSessionProctor>> saved = org.mockito.ArgumentCaptor.forClass(List.class);
         verify(proctorRepository).saveAll(saved.capture());
         assertThat(saved.getValue()).extracting(ExamSessionProctor::getProctorPublicId)
-                .containsExactly(lead, assistant);
-        assertThat(saved.getValue()).extracting(ExamSessionProctor::getRole)
-                .containsExactly(ProctorRole.LEAD_PROCTOR, ProctorRole.ASSISTANT_PROCTOR);
+                .containsExactly(first, second);
         assertThat(saved.getValue()).allSatisfy(assignment -> {
             assertThat(assignment.getSession()).isSameAs(session);
             assertThat(assignment.getTenantId()).isEqualTo(tenantId);
@@ -151,7 +146,7 @@ class ProctorAssignmentServiceTest {
                 .requireActiveProctorInTenant(ineligible, tenantId);
 
         assertThatThrownBy(() -> proctorService.assignAtCreation(session, List.of(
-                new AssignProctorRequest(eligible, null), new AssignProctorRequest(ineligible, null))))
+                new AssignProctorRequest(eligible), new AssignProctorRequest(ineligible))))
                 .isInstanceOf(IdentityService.IdentityNotEligibleException.class);
 
         verify(proctorRepository, never()).saveAll(any());
@@ -163,39 +158,15 @@ class ProctorAssignmentServiceTest {
         UUID proctor = UUID.randomUUID();
 
         assertThatThrownBy(() -> proctorService.assignAtCreation(session, List.of(
-                new AssignProctorRequest(proctor, null),
-                new AssignProctorRequest(proctor, ProctorRole.LEAD_PROCTOR))))
+                new AssignProctorRequest(proctor),
+                new AssignProctorRequest(proctor))))
                 .isInstanceOf(com.pte.session.internal.exception.staff.AlreadyAssignedException.class);
 
         verify(proctorRepository, never()).saveAll(any());
     }
 
     @Test
-    void updateProctorRole_updates() {
-        UUID tenantId = UUID.randomUUID();
-        UUID sessionPublicId = UUID.randomUUID();
-        UUID assignmentPublicId = UUID.randomUUID();
-        ExamSession session = session(1L, sessionPublicId, tenantId);
-        CurrentUser caller = hostAdmin(tenantId);
-
-        ExamSessionProctor assignment = new ExamSessionProctor();
-        assignment.setPublicId(assignmentPublicId);
-        assignment.setSession(session);
-        assignment.setProctorPublicId(UUID.randomUUID());
-
-        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
-        when(proctorRepository.findByPublicId(assignmentPublicId)).thenReturn(Optional.of(assignment));
-        when(proctorRepository.save(assignment)).thenReturn(assignment);
-
-        ProctorAssignmentResponse response = proctorService.updateProctorRole(sessionPublicId, assignmentPublicId,
-                new UpdateProctorRoleRequest(ProctorRole.LEAD_PROCTOR), caller);
-
-        assertThat(response.role()).isEqualTo(ProctorRole.LEAD_PROCTOR);
-        assertThat(assignment.getRole()).isEqualTo(ProctorRole.LEAD_PROCTOR);
-    }
-
-    @Test
-    void updateProctorRole_fromDifferentSession_throwsNotFound_doesNotSave() {
+    void unassignProctor_fromDifferentSession_throwsNotFound_doesNotDelete() {
         UUID tenantId = UUID.randomUUID();
         UUID sessionPublicId = UUID.randomUUID();
         UUID assignmentPublicId = UUID.randomUUID();
@@ -208,13 +179,12 @@ class ProctorAssignmentServiceTest {
         assignment.setSession(otherSession);
         assignment.setProctorPublicId(UUID.randomUUID());
 
-        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
+        when(sessionLifecycleService.findOwnedWithLock(sessionPublicId, caller)).thenReturn(session);
         when(proctorRepository.findByPublicId(assignmentPublicId)).thenReturn(Optional.of(assignment));
 
-        assertThatThrownBy(() -> proctorService.updateProctorRole(sessionPublicId, assignmentPublicId,
-                new UpdateProctorRoleRequest(ProctorRole.LEAD_PROCTOR), caller))
+        assertThatThrownBy(() -> proctorService.unassignProctor(sessionPublicId, assignmentPublicId, caller))
                 .isInstanceOf(ProctorAssignmentNotFoundException.class);
 
-        verify(proctorRepository, never()).save(any());
+        verify(proctorRepository, never()).delete(any());
     }
 }

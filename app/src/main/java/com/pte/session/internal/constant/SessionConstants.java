@@ -184,7 +184,6 @@ public final class SessionConstants {
     public static final String CAPACITY_REQUIRED = "Capacity is required";
     public static final String STUDENT_REFERENCE_REQUIRED = "Student reference is required";
     public static final String REPLAY_POLICY_LIMIT_POSITIVE = "Replay policy limit must be positive if provided";
-    public static final String ROLE_REQUIRED = "Role is required";
     public static final String CLASS_REFERENCE_REQUIRED = "Class reference is required";
     public static final String EXAM_PREFLIGHT_FRIENDLY =
             "This exam is not ready yet. Review the highlighted template, package, schedule, or student conflicts.";
