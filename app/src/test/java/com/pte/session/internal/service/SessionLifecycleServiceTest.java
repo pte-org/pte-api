@@ -42,6 +42,7 @@ import com.pte.session.internal.service.lifecycle.SessionScheduleService;
 import com.pte.session.internal.service.lifecycle.SessionReadService;
 import com.pte.session.internal.service.lifecycle.SessionReminderService;
 import com.pte.session.internal.service.lifecycle.SessionRevocationService;
+import com.pte.session.dto.event.SessionClosedEvent;
 import com.pte.session.internal.service.lifecycle.SessionStateService;
 import com.pte.session.internal.service.lifecycle.SessionSubscriptionRules;
 import com.pte.session.internal.service.lifecycle.SessionSubscriptionService;
@@ -118,7 +119,7 @@ class SessionLifecycleServiceTest {
                         access, subscriptions),
                 new SessionSubscriptionService(sessionRepository, registrationRepository, billingService,
                         access, subscriptions),
-                new SessionStateService(sessionRepository, access, subscriptions, auditLogService),
+                new SessionStateService(sessionRepository, access, subscriptions, auditLogService, eventPublisher),
                 new SessionPolicyService(sessionRepository, access, com.pte.TestClocks.fixed()),
                 new SessionScheduleService(sessionRepository, access, subscriptions, auditLogService,
                         com.pte.TestClocks.fixed()),
@@ -573,6 +574,17 @@ class SessionLifecycleServiceTest {
 
         assertThat(session.getStatus()).isEqualTo(SessionStatus.CLOSED);
         verify(sessionRepository).findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId);
+    }
+
+    @Test
+    void closePublishesTheClosedEventSoAttemptsStillInProgressAreSettledInTheSameTransaction() {
+        ExamSession session = existingSession(SessionStatus.OPEN, 100);
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(session.getPublicId(), tenantId))
+                .thenReturn(Optional.of(session));
+
+        service.close(session.getPublicId(), hostAdmin);
+
+        verify(eventPublisher).publishEvent(new SessionClosedEvent(session.getPublicId(), tenantId));
     }
 
     @Test

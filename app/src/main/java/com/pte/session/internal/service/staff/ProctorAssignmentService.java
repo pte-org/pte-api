@@ -4,9 +4,7 @@ import com.pte.session.internal.service.SessionLifecycleService;
 import com.pte.identity.IdentityService;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ExamSessionProctor;
-import com.pte.session.domain.enums.ProctorRole;
 import com.pte.session.internal.dto.request.AssignProctorRequest;
-import com.pte.session.internal.dto.request.UpdateProctorRoleRequest;
 import com.pte.session.internal.dto.response.proctor.ProctorAssignmentResponse;
 import com.pte.session.internal.exception.staff.AlreadyAssignedException;
 import com.pte.session.internal.exception.staff.ProctorAssignmentNotFoundException;
@@ -17,7 +15,10 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /** Assigns proctors to a session; a double assignment is rejected by the DB unique constraint. */
@@ -44,16 +45,41 @@ public class ProctorAssignmentService {
         ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
         tenancyService.assertTenantActive(session.getTenantId());
         identityService.requireActiveProctorInTenant(request.proctorPublicId(), session.getTenantId());
-        ExamSessionProctor assignment = new ExamSessionProctor();
-        assignment.setSession(session);
-        assignment.setProctorPublicId(request.proctorPublicId());
-        assignment.setTenantId(session.getTenantId());
-        assignment.setRole(request.role() != null ? request.role() : ProctorRole.ASSISTANT_PROCTOR);
+        ExamSessionProctor assignment = newAssignment(session, request);
         try {
             return toResponse(proctorRepository.save(assignment), session.getPublicId());
         } catch (DataIntegrityViolationException ex) {
             throw new AlreadyAssignedException();
         }
+    }
+
+    /**
+     * Assigns the proctors picked while an exam is being created. It joins the caller's transaction, so one proctor
+     * that is not eligible, or one picked twice, rejects the whole creation and leaves no draft behind.
+     */
+    @Transactional
+    public void assignAtCreation(ExamSession session, List<AssignProctorRequest> requests) {
+        if (requests == null || requests.isEmpty()) {
+            return;
+        }
+        Set<UUID> picked = new HashSet<>();
+        List<ExamSessionProctor> assignments = new ArrayList<>();
+        for (AssignProctorRequest request : requests) {
+            if (!picked.add(request.proctorPublicId())) {
+                throw new AlreadyAssignedException();
+            }
+            identityService.requireActiveProctorInTenant(request.proctorPublicId(), session.getTenantId());
+            assignments.add(newAssignment(session, request));
+        }
+        proctorRepository.saveAll(assignments);
+    }
+
+    private ExamSessionProctor newAssignment(ExamSession session, AssignProctorRequest request) {
+        ExamSessionProctor assignment = new ExamSessionProctor();
+        assignment.setSession(session);
+        assignment.setProctorPublicId(request.proctorPublicId());
+        assignment.setTenantId(session.getTenantId());
+        return assignment;
     }
 
     @Transactional(readOnly = true)
@@ -62,15 +88,6 @@ public class ProctorAssignmentService {
         return proctorRepository.findBySessionId(session.getId()).stream()
                 .map(assignment -> toResponse(assignment, session.getPublicId()))
                 .toList();
-    }
-
-    @Transactional
-    public ProctorAssignmentResponse updateProctorRole(UUID sessionPublicId, UUID assignmentPublicId,
-            UpdateProctorRoleRequest request, CurrentUser caller) {
-        ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
-        ExamSessionProctor assignment = ownedAssignment(session, assignmentPublicId);
-        assignment.setRole(request.role());
-        return toResponse(proctorRepository.save(assignment), session.getPublicId());
     }
 
     @Transactional
@@ -89,8 +106,7 @@ public class ProctorAssignmentService {
     }
 
     private ProctorAssignmentResponse toResponse(ExamSessionProctor assignment, UUID sessionPublicId) {
-        ProctorRole role = assignment.getRole() != null ? assignment.getRole() : ProctorRole.ASSISTANT_PROCTOR;
         return new ProctorAssignmentResponse(assignment.getPublicId(), sessionPublicId,
-                assignment.getProctorPublicId(), role);
+                assignment.getProctorPublicId());
     }
 }

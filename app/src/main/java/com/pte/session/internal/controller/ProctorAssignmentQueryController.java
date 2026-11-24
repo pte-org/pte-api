@@ -54,7 +54,6 @@ public class ProctorAssignmentQueryController {
                         v.status(),
                         v.opensAt(),
                         v.closesAt(),
-                        v.assignmentRole(),
                         v.canMonitor(),
                         v.monitoringBlockingReason()))
                 .toList();
@@ -75,7 +74,7 @@ public class ProctorAssignmentQueryController {
                 .getAssignedSessionForProctor(sessionPublicId, caller.userId(), caller.tenantId());
         return ApiResponse.success(new AssignedProctorSessionResponse(v.assignmentPublicId(),
                 v.examSessionPublicId(), v.name(), v.sessionCode(), v.status(), v.opensAt(), v.closesAt(),
-                v.assignmentRole(), v.canMonitor(), v.monitoringBlockingReason()));
+                v.canMonitor(), v.monitoringBlockingReason()));
     }
 
     @GetMapping("/mine")
@@ -100,7 +99,6 @@ public class ProctorAssignmentQueryController {
                         v.status(),
                         v.opensAt(),
                         v.closesAt(),
-                        v.assignmentRole(),
                         v.canMonitor(),
                         v.monitoringBlockingReason()))
                 .toList();

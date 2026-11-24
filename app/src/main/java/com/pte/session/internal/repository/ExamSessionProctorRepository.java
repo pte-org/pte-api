@@ -17,6 +17,9 @@ public interface ExamSessionProctorRepository extends JpaRepository<ExamSessionP
 
     boolean existsBySessionIdAndProctorPublicId(Long sessionId, UUID proctorPublicId);
 
+    /** Whether anyone is assigned to supervise the session, which decides if attendance gates entry. */
+    boolean existsBySessionIdAndDeletedFalse(Long sessionId);
+
     Optional<ExamSessionProctor> findByPublicId(UUID publicId);
 
     @Query(value = "SELECT pa FROM ExamSessionProctor pa JOIN FETCH pa.session s "

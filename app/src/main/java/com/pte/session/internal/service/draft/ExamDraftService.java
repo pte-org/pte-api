@@ -3,6 +3,7 @@ package com.pte.session.internal.service.draft;
 import com.pte.session.internal.exception.capacity.SessionTimeConflictException;
 import com.pte.session.internal.service.ExamSessionAccess;
 import com.pte.session.internal.service.SessionLifecycleService;
+import com.pte.session.internal.service.staff.ProctorAssignmentService;
 import com.pte.billing.BillingService;
 import com.pte.billing.SubscriptionView;
 import com.pte.session.domain.ExamPolicy;
@@ -51,6 +52,7 @@ public class ExamDraftService {
     private final ExamDefinitionService examDefinitionService;
     private final BillingService billingService;
     private final SessionCodeGenerator sessionCodeGenerator;
+    private final ProctorAssignmentService proctorAssignments;
     private final Clock clock;
 
     public ExamDraftService(ExamSessionRepository sessionRepository,
@@ -60,7 +62,9 @@ public class ExamDraftService {
             ExamDefinitionService examDefinitionService,
             BillingService billingService,
             SessionCodeGenerator sessionCodeGenerator,
+            ProctorAssignmentService proctorAssignments,
             Clock clock) {
+        this.proctorAssignments = proctorAssignments;
         this.sessionRepository = sessionRepository;
         this.access = access;
         this.skills = skills;
@@ -114,6 +118,7 @@ public class ExamDraftService {
         session.setStatus(SessionStatus.DRAFT);
         session.setSessionCode(sessionCodeGenerator.generate(tenantId, request.opensAt()));
         ExamSession saved = sessionRepository.saveAndFlush(session);
+        proctorAssignments.assignAtCreation(saved, request.proctors());
         access.recordExamAudit(caller, saved, SessionConstants.EVENT_EXAM_DRAFT_CREATED, saved.getName());
         return SessionMapper.toResponse(saved);
     }
