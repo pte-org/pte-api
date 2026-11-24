@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
 public class BillingOverviewService {
 
     /** A subscription ending within this many days is flagged as expiring soon. */
-    public static final int EXPIRING_SOON_DAYS = 30;
+    public static final int EXPIRING_SOON_DAYS = 7;
     /** Upper bound on listed subscriptions; the nearest expiry is always the first row. */
     public static final int MAX_CURRENT_SUBSCRIPTIONS = 10;
 

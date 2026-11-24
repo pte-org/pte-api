@@ -54,6 +54,7 @@ public final class BillingConstants {
     public static final String REQUESTED_CODE_ALREADY_USED = "REQUESTED_CODE_ALREADY_USED";
     public static final String TENANT_NAME_ALREADY_USED = "TENANT_NAME_ALREADY_USED";
     public static final String TENANT_TAX_CODE_ALREADY_USED = "TENANT_TAX_CODE_ALREADY_USED";
+    public static final String APPLICATION_EMAIL_ALREADY_PENDING = "APPLICATION_EMAIL_ALREADY_PENDING";
     public static final String APPLICATION_NOT_PENDING = "APPLICATION_NOT_PENDING";
     public static final String PLAN_NOT_FOUND = "PLAN_NOT_FOUND";
     public static final String PLAN_TYPE_INVALID = "PLAN_TYPE_INVALID";

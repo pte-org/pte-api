@@ -46,7 +46,7 @@ public class NotificationLog extends BaseEntity {
     @Column(nullable = false)
     private String subject;
 
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "text")
     private String body;
 
     @Enumerated(EnumType.STRING)

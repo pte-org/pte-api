@@ -144,4 +144,26 @@ class BrandedEmailTemplateTest {
         assertThat(email.html()).contains("Hello,").doesNotContain("null");
         assertThat(email.text()).doesNotContain("null");
     }
+
+    @Test
+    void rejection_keepsReasonLineBreaksAndEscapesMarkup() {
+        RenderedEmail email = BrandedEmailTemplate.applicationRejected("Acme", "acme",
+                "Line one\r\nLine <b>two</b> & three", "https://x.example/register", "help@x.example", 2026);
+
+        assertThat(email.html()).contains("Line one<br>Line &lt;b&gt;two&lt;/b&gt; &amp; three")
+                .doesNotContain("<b>two");
+        assertThat(email.text()).contains("Reason: Line one");
+    }
+
+    @Test
+    void approvalAndRejection_shareTheSameButtonColourAndLinkSpacing() {
+        String approved = BrandedEmailTemplate.applicationApproved("Acme", "acme", "u", "p", "https://x.example/login",
+                "help@x.example", 2026).html();
+        String rejected = BrandedEmailTemplate.applicationRejected("Acme", "acme", "r", "https://x.example/register",
+                "help@x.example", 2026).html();
+
+        for (String html : new String[] {approved, rejected}) {
+            assertThat(html).contains("bgcolor=\"#3359d2\"").contains("margin:0 0 6px").contains("margin:0 0 22px");
+        }
+    }
 }

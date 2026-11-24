@@ -95,12 +95,12 @@ class AdminCommercialSectionsTest {
     // ---- subscriptions ----
 
     @Test
-    void subscriptionsCarryActiveExpiringSoonThirtyDaysAndTheSourceSplit() {
+    void subscriptionsCarryActiveExpiringSoonSevenDaysAndTheSourceSplit() {
         Subscriptions subscriptions = sections.subscriptions(window);
 
         assertThat(subscriptions.active()).isEqualTo(33);
         assertThat(subscriptions.expiringSoon()).isEqualTo(5);
-        assertThat(subscriptions.expiringSoonDays()).isEqualTo(30).isEqualTo(BillingOverviewService.EXPIRING_SOON_DAYS);
+        assertThat(subscriptions.expiringSoonDays()).isEqualTo(7).isEqualTo(BillingOverviewService.EXPIRING_SOON_DAYS);
         assertThat(subscriptions.activatedBySource()).containsEntry("PAYMENT", 4L).containsEntry("LICENSE_CODE", 3L);
     }
 

@@ -27,7 +27,7 @@ public class HostAdminProvisioner {
 
     public HostAdminCreated createHostAdmin(UUID tenantId, String tenantCode, String email) {
         User user = new User();
-        user.setUsername(UsernameGenerator.generateUnused(tenantCode, userRepository::existsByUsername));
+        user.setUsername(UsernameGenerator.generateUnused(tenantCode, email, userRepository::existsByUsername));
         user.setEmail(email);
         user.setStatus(UserStatus.ACTIVE);
         user.setOrganizationId(tenantId);
