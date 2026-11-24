@@ -43,6 +43,9 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
     @Query("select o.organizationType from Organization o where o.publicId = :organizationId")
     Optional<String> findOrganizationTypeByPublicId(@Param("organizationId") UUID organizationId);
 
+    @Query("select o.name from Organization o where o.publicId = :organizationId")
+    Optional<String> findOrganizationNameByPublicId(@Param("organizationId") UUID organizationId);
+
     List<Organization> findByPublicIdInAndStatusAndDeletedFalse(Collection<UUID> publicIds, OrganizationStatus status);
 
     List<Organization> findByStatusAndSuspendedUntilIsNotNullAndSuspendedUntilLessThanEqualAndDeletedFalse(

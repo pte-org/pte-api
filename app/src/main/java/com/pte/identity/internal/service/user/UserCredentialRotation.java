@@ -82,12 +82,10 @@ public class UserCredentialRotation {
                 user.getFullName(), temporaryPassword, true);
     }
 
+    /** Rotates the password and returns it to the caller for hand-over; nothing is emailed. */
     public GeneratedCredentialsResponse generateStudentCredentials(UUID publicId, CurrentUser caller) {
         Target target = targetResolver.findScoped(publicId, caller, false);
-        if (!provisioningHelper.canManageTarget(caller, target.roles())
-                || !target.roles().contains(Role.STUDENT)) {
-            throw new ForbiddenPasswordResetException();
-        }
+        requireMayChangeCredential(caller, target);
         User user = target.user();
         String temporaryPassword = rotateTemporaryPassword(target);
         return new GeneratedCredentialsResponse(user.getPublicId(), user.getUsername(), user.getEmail(),

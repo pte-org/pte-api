@@ -5,6 +5,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.ScoringDomainConstants;
 import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.service.objective.AnswerContentReader;
 import com.pte.scoring.support.EvaluationFixtures;
@@ -478,6 +479,63 @@ class AiScoringWorkerTest {
 
     private static EffectiveRubric rubric(String taskType) {
         return new EffectiveRubric(CATALOG.find(taskType).orElseThrow(), CATALOG.defaultParameters(taskType));
+    }
+
+    @Test
+    void worker_blankSpeechAnswer_scoresZeroWithoutAnyVendorCall() {
+        AiAnswerScorer scorer = org.mockito.Mockito.mock(AiAnswerScorer.class);
+        when(scorer.taskTypes()).thenReturn(Set.of(ScoringConstants.TASK_TYPE_READ_ALOUD));
+        AiEvaluation answer = dispatched(ScoringConstants.TASK_TYPE_READ_ALOUD);
+        content(answer, null, "the passage");
+        when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
+                .thenReturn(Optional.of(answer));
+
+        workerWith(List.of(scorer)).onAiScoringJob(job(answer, "AI_SPEECH"));
+
+        assertBlankScoredZero(answer);
+        verify(scorer, never()).score(any(AiScoringRequest.class));
+        verifyNoInteractions(speechScoringClient, essayScoringClient, rubricResolver);
+        verify(resultPersistenceService, never()).markScoringFailed(any(), any(), any(), any(), anyLong(), any());
+    }
+
+    @Test
+    void worker_emptyStringAnswer_scoresZeroWithoutAnyVendorCall() {
+        AiEvaluation answer = dispatched(CUSTOM_SPEECH_TASK);
+        content(answer, "", null);
+        when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
+                .thenReturn(Optional.of(answer));
+
+        worker.onAiScoringJob(job(answer, "AI_SPEECH"));
+
+        assertBlankScoredZero(answer);
+        verifyNoInteractions(speechScoringClient, essayScoringClient);
+    }
+
+    @Test
+    void worker_blankTextAnswerOnGenericClient_scoresZeroWithoutAnyVendorCall() {
+        AiEvaluation answer = dispatched(CUSTOM_TEXT_TASK);
+        content(answer, "   ", null);
+        when(scoringAnswerRepository.findByAnswerPublicId(answer.getAnswerPublicId()))
+                .thenReturn(Optional.of(answer));
+
+        worker.onAiScoringJob(job(answer, "AI_TEXT"));
+
+        assertBlankScoredZero(answer);
+        verifyNoInteractions(speechScoringClient, essayScoringClient);
+        verify(resultPersistenceService, never()).markScoringFailed(any(), any(), any(), any(), anyLong(), any());
+    }
+
+    private void assertBlankScoredZero(AiEvaluation answer) {
+        ArgumentCaptor<AiScoreResult> result = ArgumentCaptor.forClass(AiScoreResult.class);
+        verify(resultPersistenceService).persistAiScore(eq(answer.getAnswerPublicId()), eq(answer.getAttemptPublicId()),
+                eq(answer.getTenantId()), eq(answer.getSessionPublicId()), eq(answer.getDispatchToken()),
+                result.capture());
+        assertThat(result.getValue().rawScore()).isZero();
+        assertThat(result.getValue().providerCategory()).isEqualTo(AiProviderCategory.REAL);
+        assertThat(result.getValue().provider()).isEqualTo(ScoringDomainConstants.AI_BLANK_ANSWER_PROVIDER);
+        assertThat(result.getValue().subScores()).isEmpty();
+        assertThat(result.getValue().rubricVersionPublicId()).isNull();
+        assertThat(result.getValue().feedback()).isEqualTo(ScoringDomainConstants.AI_BLANK_ANSWER_FEEDBACK);
     }
 
     private AiEvaluation dispatched(String taskType) {

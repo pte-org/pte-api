@@ -32,6 +32,9 @@ public final class SessionConstants {
     public static final String SESSION_NOT_STARTED = "SESSION_NOT_STARTED";
     public static final String SESSION_NOT_STARTED_FRIENDLY =
             "This exam has not opened yet. Please come back at the scheduled start time.";
+    public static final String ATTENDANCE_REQUIRED = "ATTENDANCE_REQUIRED";
+    public static final String ATTENDANCE_REQUIRED_FRIENDLY =
+            "Your proctor has not checked you in yet. Please wait for check-in, then try again.";
     public static final String SESSION_CLOSED = "SESSION_CLOSED";
     public static final String SESSION_CLOSED_FRIENDLY =
             "This exam has already closed.";
@@ -168,7 +171,8 @@ public final class SessionConstants {
     public static final String CEFR_TARGET_DUPLICATE_LEVEL = "A CEFR level can appear only once";
     public static final String CEFR_TARGET_NOT_100 = "The CEFR percentages must sum to 100";
     public static final String SKILLS_SIZE_INVALID = "Between 1 and 4 skills must be selected";
-    public static final String SKILLS_DUPLICATE = "Select each skill only once.";
+    public static final String PROCTORS_SIZE_INVALID = "At most 50 proctors can be assigned when creating an exam";
+    public static final String SKILLS_DUPLICATE ="Select each skill only once.";
     public static final String SKILLS_NOT_IN_TEMPLATE = "Choose only skills included in the selected exam template.";
     public static final String SKILLS_FULL_TEMPLATE_REQUIRED =
             "Mock and official exams must include every skill in the selected template.";
@@ -183,7 +187,6 @@ public final class SessionConstants {
     public static final String CAPACITY_REQUIRED = "Capacity is required";
     public static final String STUDENT_REFERENCE_REQUIRED = "Student reference is required";
     public static final String REPLAY_POLICY_LIMIT_POSITIVE = "Replay policy limit must be positive if provided";
-    public static final String ROLE_REQUIRED = "Role is required";
     public static final String CLASS_REFERENCE_REQUIRED = "Class reference is required";
     public static final String EXAM_PREFLIGHT_FRIENDLY =
             "This exam is not ready yet. Review the highlighted template, package, schedule, or student conflicts.";

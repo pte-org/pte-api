@@ -146,10 +146,12 @@ class UserServiceTest {
         User user = accountOf(account(1L, userPublicId, null), tenantId, Role.HOST_ADMIN);
         when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(user));
         when(tenancyService.findOrganizationType(tenantId)).thenReturn(Optional.of("SCHOOL"));
+        when(tenancyService.findOrganizationName(tenantId)).thenReturn(Optional.of("Trường Hoa Sen"));
 
         UserResponse response = userService.me(new CurrentUser(userPublicId, tenantId, List.of("HOST_ADMIN")));
 
         assertThat(response.organizationType()).isEqualTo("SCHOOL");
+        assertThat(response.organizationName()).isEqualTo("Trường Hoa Sen");
         assertThat(response.tenantId()).isEqualTo(tenantId);
         assertThat(response.roles()).containsExactly("HOST_ADMIN");
     }
@@ -938,13 +940,31 @@ class UserServiceTest {
     }
 
     @Test
-    void generateStudentCredentials_forAnAccountThatIsNotAStudent_throwsForbidden() {
+    void generateStudentCredentials_forStaffTheCallerManages_rotatesHashWithoutEmail() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         User proctor = accountOf(account(1L, userPublicId, "OldPassword123"), tenantId, Role.PROCTOR);
         when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(proctor);
         CurrentUser caller = host(tenantId);
         when(provisioningHelper.canManageTarget(caller, proctor.getRoles())).thenReturn(true);
+
+        GeneratedCredentialsResponse response = userService.generateStudentCredentials(userPublicId, caller);
+
+        assertThat(response.emailQueued()).isFalse();
+        assertThat(passwordEncoder.matches(response.temporaryPassword(), proctor.getCredentialHash())).isTrue();
+        assertThat(proctor.isMustChangePassword()).isTrue();
+        verify(userRepository).save(proctor);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void generateStudentCredentials_forAnAccountTheCallerCannotManage_throwsForbidden() {
+        UUID userPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        User fellowHostAdmin = accountOf(account(1L, userPublicId, "OldPassword123"), tenantId, Role.HOST_ADMIN);
+        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(fellowHostAdmin);
+        CurrentUser caller = host(tenantId);
+        when(provisioningHelper.canManageTarget(caller, fellowHostAdmin.getRoles())).thenReturn(false);
 
         assertThatThrownBy(() -> userService.generateStudentCredentials(userPublicId, caller))
                 .isInstanceOf(ForbiddenPasswordResetException.class);

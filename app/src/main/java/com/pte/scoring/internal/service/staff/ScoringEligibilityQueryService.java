@@ -47,6 +47,6 @@ public class ScoringEligibilityQueryService {
 
     public boolean isAiEligible(AiEvaluation answer) {
         ScoringMethod method = answer.getScoringMethod();
-        return method != null && method.isAiScored();
+        return method != null && method.isAiScored() && !answer.isScoredAsBlankAnswer();
     }
 }

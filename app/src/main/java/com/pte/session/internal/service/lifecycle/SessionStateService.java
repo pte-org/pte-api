@@ -3,6 +3,7 @@ package com.pte.session.internal.service.lifecycle;
 import com.pte.billing.SubscriptionView;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.enums.SessionStatus;
+import com.pte.session.dto.event.SessionClosedEvent;
 import com.pte.session.internal.dto.response.SessionResponse;
 import com.pte.session.internal.exception.SessionNotFoundException;
 import com.pte.session.internal.exception.lifecycle.SessionNotOpenToCloseException;
@@ -15,6 +16,7 @@ import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.tenancy.TenancyService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
@@ -31,12 +33,14 @@ public class SessionStateService {
     private final SessionSubscriptionRules subscriptions;
     private final AuditLogService auditLogService;
     private final TenancyService tenancyService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public SessionStateService(ExamSessionRepository sessionRepository,
             SessionAccess access,
             SessionSubscriptionRules subscriptions,
-            AuditLogService auditLogService) {
-        this(sessionRepository, access, subscriptions, auditLogService, null);
+            AuditLogService auditLogService,
+            ApplicationEventPublisher eventPublisher) {
+        this(sessionRepository, access, subscriptions, auditLogService, null, eventPublisher);
     }
 
     @Autowired
@@ -44,12 +48,14 @@ public class SessionStateService {
             SessionAccess access,
             SessionSubscriptionRules subscriptions,
             AuditLogService auditLogService,
-            TenancyService tenancyService) {
+            TenancyService tenancyService,
+            ApplicationEventPublisher eventPublisher) {
         this.sessionRepository = sessionRepository;
         this.access = access;
         this.subscriptions = subscriptions;
         this.auditLogService = auditLogService;
         this.tenancyService = tenancyService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -128,6 +134,7 @@ public class SessionStateService {
             session.close();
             recordExamAudit(systemCaller, session, SessionConstants.EVENT_EXAM_AUTO_CLOSED,
                     "%s (%s -> %s)".formatted(session.getName(), SessionStatus.OPEN, SessionStatus.CLOSED));
+            publishClosed(session);
         }
         return Optional.of(SessionMapper.toResponse(session));
     }
@@ -136,7 +143,13 @@ public class SessionStateService {
         session.close();
         recordExamAudit(caller, session, auditEvent,
                 "%s (%s -> %s)".formatted(session.getName(), SessionStatus.OPEN, SessionStatus.CLOSED));
+        publishClosed(session);
         return SessionMapper.toResponse(session);
+    }
+
+    /** Synchronous, so the attempts still in progress are submitted in this same transaction as the close. */
+    private void publishClosed(ExamSession session) {
+        eventPublisher.publishEvent(new SessionClosedEvent(session.getPublicId(), session.getTenantId()));
     }
 
     private void recordExamAudit(CurrentUser caller, ExamSession session, String action, String summary) {

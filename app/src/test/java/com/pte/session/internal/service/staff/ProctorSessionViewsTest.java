@@ -2,7 +2,6 @@ package com.pte.session.internal.service.staff;
 
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ExamSessionProctor;
-import com.pte.session.domain.enums.ProctorRole;
 import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.response.ProctorWorkspaceSessionView;
 import org.junit.jupiter.api.Test;
@@ -29,12 +28,11 @@ class ProctorSessionViewsTest {
         return session;
     }
 
-    private ExamSessionProctor assignment(ExamSession session, ProctorRole role) {
+    private ExamSessionProctor assignment(ExamSession session) {
         ExamSessionProctor assignment = new ExamSessionProctor();
         assignment.setPublicId(UUID.randomUUID());
         assignment.setSession(session);
         assignment.setProctorPublicId(UUID.randomUUID());
-        assignment.setRole(role);
         return assignment;
     }
 
@@ -146,9 +144,9 @@ class ProctorSessionViewsTest {
     }
 
     @Test
-    void toWorkspaceSessionView_carriesSessionFieldsRoleAndMonitorability() {
+    void toWorkspaceSessionView_carriesSessionFieldsAndMonitorability() {
         ExamSession open = session(SessionStatus.OPEN, OPENS, CLOSES);
-        ExamSessionProctor assignment = assignment(open, ProctorRole.LEAD_PROCTOR);
+        ExamSessionProctor assignment = assignment(open);
 
         ProctorWorkspaceSessionView view = ProctorSessionViews.toWorkspaceSessionView(assignment, OPENS.plusSeconds(1));
 
@@ -156,25 +154,17 @@ class ProctorSessionViewsTest {
         assertThat(view.examSessionPublicId()).isEqualTo(open.getPublicId());
         assertThat(view.name()).isEqualTo("Mock A");
         assertThat(view.sessionCode()).isEqualTo("MA-01");
-        assertThat(view.assignmentRole()).isEqualTo("LEAD_PROCTOR");
         assertThat(view.canMonitor()).isTrue();
         assertThat(view.monitoringBlockingReason()).isNull();
     }
 
     @Test
     void toWorkspaceSessionView_afterTheWindow_reportsWhyMonitoringIsBlocked() {
-        ExamSessionProctor assignment = assignment(session(SessionStatus.OPEN, OPENS, CLOSES), ProctorRole.ASSISTANT_PROCTOR);
+        ExamSessionProctor assignment = assignment(session(SessionStatus.OPEN, OPENS, CLOSES));
 
         ProctorWorkspaceSessionView view = ProctorSessionViews.toWorkspaceSessionView(assignment, CLOSES.plusSeconds(1));
 
         assertThat(view.canMonitor()).isFalse();
         assertThat(view.monitoringBlockingReason()).isEqualTo("WINDOW_CLOSED");
-    }
-
-    @Test
-    void toWorkspaceSessionView_assignmentWithoutRole_hasNullRole() {
-        ExamSessionProctor assignment = assignment(session(SessionStatus.OPEN, OPENS, CLOSES), null);
-
-        assertThat(ProctorSessionViews.toWorkspaceSessionView(assignment, OPENS).assignmentRole()).isNull();
     }
 }

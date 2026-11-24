@@ -23,7 +23,6 @@ import com.pte.scoring.internal.exception.examiner.ExaminerReceiptConflictExcept
 import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.scoring.internal.repository.GradingAssignmentRepository;
 import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
-import com.pte.scoring.internal.repository.GradingIssueRepository;
 import com.pte.scoring.support.EvaluationFixtures;
 import com.pte.session.SessionService;
 import com.pte.shared.audit.AuditHistoryReader;
@@ -81,8 +80,6 @@ class ExaminerDraftCommandServiceTest {
     @Mock
     private GradingAssignmentRepository assignmentRepository;
     @Mock
-    private GradingIssueRepository issueRepository;
-    @Mock
     private ExaminerEvaluationRepository evaluationRepository;
     @Mock
     private AiEvaluationRepository answerRepository;
@@ -111,7 +108,7 @@ class ExaminerDraftCommandServiceTest {
         ExaminerWorkRecorder recorder = new ExaminerWorkRecorder(idempotencyKeyService, auditWriter, auditReader,
                 jsonMapper);
         service = new ExaminerDraftCommandService(sessionService, assignmentRepository,
-                issueRepository, evaluationRepository, answerRepository, gateway, attemptService,
+                evaluationRepository, answerRepository, gateway, attemptService,
                 eligibilityQueryService, workflowQueryService, new ExaminerReviewVersionService(),
                 recorder, new ExaminerFinalizeSubmitter(evaluationRepository, new ExaminerReviewVersionService(),
                         attemptService, com.pte.scoring.support.ExaminerTraitWorkflowStub.create(),
@@ -329,8 +326,6 @@ class ExaminerDraftCommandServiceTest {
         when(answerRepository.findBySessionPublicIdAndTenantIdAndAttemptPublicIdIn(sessionId, tenantId,
                 List.of(attemptId))).thenReturn(List.of(ai));
         when(eligibilityQueryService.isAiEligible(ai)).thenReturn(true);
-        when(issueRepository.findByTenantIdAndAssignmentIdAndDeletedFalseOrderByReportedAtAsc(tenantId, 7L))
-                .thenReturn(List.of());
     }
 
     private SaveExaminerDraftRequest draftRequest(long expectedDraftVersion) {

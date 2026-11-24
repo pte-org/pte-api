@@ -128,7 +128,9 @@ public class UserService {
                 .orElseThrow(UserNotFoundException::new);
         String organizationType = user.getOrganizationId() == null ? null
                 : tenancyService.findOrganizationType(user.getOrganizationId()).orElse(null);
-        return UserMapper.toResponse(user, organizationType);
+        String organizationName = user.getOrganizationId() == null ? null
+                : tenancyService.findOrganizationName(user.getOrganizationId()).orElse(null);
+        return UserMapper.toResponse(user, organizationType, organizationName);
     }
 
     @Transactional(readOnly = true)
@@ -191,8 +193,8 @@ public class UserService {
     }
 
     /**
-     * Generates a fresh Student credential for Host verification without sending email. The cleartext password is
-     * returned only in this response.
+     * Generates a fresh credential for a Student or staff account the caller may manage, without sending email. The
+     * cleartext password is returned only in this response.
      */
     @Transactional
     public GeneratedCredentialsResponse generateStudentCredentials(UUID publicId, CurrentUser caller) {

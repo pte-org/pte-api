@@ -1,9 +1,11 @@
 package com.pte.scoring.internal.messaging.consumer;
 
 import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.ScoringDomainConstants;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.internal.service.objective.AnswerContentReader;
 import com.pte.scoring.domain.enums.AiFailureReason;
+import com.pte.scoring.domain.enums.AiProviderCategory;
 import com.pte.scoring.internal.config.AiProviderProperties;
 import com.pte.scoring.internal.constant.ScoringConstants;
 import com.pte.scoring.internal.messaging.job.AiScoringJob;
@@ -56,6 +58,11 @@ import java.util.Map;
 public class AiScoringWorker {
 
     private static final Logger log = LoggerFactory.getLogger(AiScoringWorker.class);
+
+    /** What a never-answered task scores: 0 without paying a vendor, for every AI-scored task type. */
+    private static final AiScoreResult BLANK_ANSWER_RESULT = new AiScoreResult(0, Map.of(),
+            ScoringDomainConstants.AI_BLANK_ANSWER_FEEDBACK, AiProviderCategory.REAL,
+            ScoringDomainConstants.AI_BLANK_ANSWER_PROVIDER, null, null);
 
     private final AiEvaluationRepository scoringAnswerRepository;
     private final SpeechScoringClient speechScoringClient;
@@ -130,6 +137,11 @@ public class AiScoringWorker {
         SubmittedAnswerView content = contentReader.one(job.answerPublicId(), job.tenantId()).orElse(null);
         if (content == null) {
             log.warn("AI scoring skipped for answer {}: the submitted answer is gone", job.answerPublicId());
+            return;
+        }
+        if (content.payload() == null || content.payload().isBlank()) {
+            resultPersistenceService.persistAiScore(job.answerPublicId(), job.attemptPublicId(), job.tenantId(),
+                    job.sessionPublicId(), token, BLANK_ANSWER_RESULT);
             return;
         }
         AiScoreResult result;

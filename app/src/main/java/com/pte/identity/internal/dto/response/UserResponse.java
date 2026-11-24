@@ -18,6 +18,7 @@ public record UserResponse(
         String phone,
         LocalDate dateOfBirth,
         String organizationType,
+        String organizationName,
         boolean mustChangePassword,
         boolean archived) {
 }

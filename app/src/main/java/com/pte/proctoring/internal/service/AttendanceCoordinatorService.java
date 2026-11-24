@@ -1,12 +1,15 @@
 package com.pte.proctoring.internal.service;
 
 import com.pte.attempt.AttemptService;
+import com.pte.attempt.domain.enums.AttemptStatus;
 import com.pte.attempt.dto.response.MonitoringAttemptView;
 import com.pte.identity.IdentityService;
 import com.pte.identity.dto.response.StudentDisplayNameView;
+import com.pte.proctoring.internal.exception.AbsentAfterAttemptException;
 import com.pte.session.SessionService;
 import com.pte.session.dto.request.RecordAttendanceRequest;
 import com.pte.session.dto.request.RecordIdentityVerificationRequest;
+import com.pte.session.domain.enums.AttendanceStatus;
 import com.pte.session.dto.response.AttendanceCommandReceiptView;
 import com.pte.session.dto.response.AttendanceHistoryItemView;
 import com.pte.session.dto.response.AttendanceHistoryView;
@@ -138,7 +141,21 @@ public class AttendanceCoordinatorService {
             RecordAttendanceRequest request,
             CurrentUser caller,
             boolean isHost) {
+        if (request.status() == AttendanceStatus.ABSENT) {
+            requireNoStartedAttempt(sessionPublicId, studentPublicId, caller);
+        }
         return sessionService.recordAttendance(sessionPublicId, studentPublicId, request, caller, isHost);
+    }
+
+    /** A student who started or submitted the exam is, by definition, not absent. */
+    private void requireNoStartedAttempt(UUID sessionPublicId, UUID studentPublicId, CurrentUser caller) {
+        MonitoringAttemptView attempt = attemptService
+                .getLatestAttemptsForStudents(sessionPublicId, caller.tenantId(), List.of(studentPublicId))
+                .get(studentPublicId);
+        if (attempt != null
+                && (attempt.status() == AttemptStatus.IN_PROGRESS || attempt.status() == AttemptStatus.SUBMITTED)) {
+            throw new AbsentAfterAttemptException();
+        }
     }
 
     public AttendanceCommandReceiptView getReceipt(
