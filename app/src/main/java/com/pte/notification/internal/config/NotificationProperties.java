@@ -24,16 +24,30 @@ public class NotificationProperties {
         this.supportEmail = supportEmail;
     }
 
-    /** Sign-in page linked from the approval email; change per environment. */
+    /** Base URL of the tenant web app; the approval and rejection emails link to its /login and /register pages. */
     @NotBlank
-    private String loginUrl = "http://localhost:3000/login";
+    private String tenantWebUrl = "http://localhost:3000";
 
-    public String getLoginUrl() {
-        return loginUrl;
+    public String getTenantWebUrl() {
+        return tenantWebUrl;
     }
 
-    public void setLoginUrl(String loginUrl) {
-        this.loginUrl = loginUrl;
+    public void setTenantWebUrl(String tenantWebUrl) {
+        this.tenantWebUrl = tenantWebUrl;
+    }
+
+    /** Sign-in page linked from the approval email. */
+    public String getLoginUrl() {
+        return stripTrailingSlash(tenantWebUrl) + "/login";
+    }
+
+    /** Registration page linked from the rejection email, so an applicant can submit again. */
+    public String getRegisterUrl() {
+        return stripTrailingSlash(tenantWebUrl) + "/register";
+    }
+
+    private static String stripTrailingSlash(String url) {
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 
     public String getMailFrom() {

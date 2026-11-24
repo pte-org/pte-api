@@ -174,7 +174,7 @@ final class EmailLayout {
     /**
      * One grey card of label and value rows split by hairlines. A row's third element picks how its value looks:
      * {@code "text"} (bold sans-serif), {@code "mono"} (an identifier the reader may copy), {@code "badge"} (an
-     * amber status pill) or {@code "badge-success"} (a green one). Values are escaped here.
+     * amber status pill) or {@code "badge-success"} (a green one) or {@code "badge-danger"} (a red one). Values are escaped here.
      */
     static String summary(String[][] rows) {
         StringBuilder html = new StringBuilder("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\""
@@ -197,6 +197,7 @@ final class EmailLayout {
                     + ";word-break:break-all;\">" + plain(value);
             case "badge" -> badge(value, "#fef3c7", "#92400e");
             case "badge-success" -> badge(value, "#d1fae5", "#065f46");
+            case "badge-danger" -> badge(value, "#fee2e2", "#991b1b");
             default -> "font-family:" + FONT + ";font-size:14px;line-height:20px;font-weight:700;color:" + HEADING
                     + ";" + WRAP + "\">" + plain(value);
         };
@@ -210,10 +211,20 @@ final class EmailLayout {
 
     /** A pale amber note with a darker left edge, for the one thing the reader must not miss. */
     static String callout(String html) {
+        return callout(html, "#fffbeb", "#f59e0b", "#78350f");
+    }
+
+    /** The same note in red, for the reason an application was not approved. */
+    static String dangerCallout(String html) {
+        return callout(html, "#fef2f2", "#ef4444", "#7f1d1d");
+    }
+
+    private static String callout(String html, String background, String edge, String ink) {
         return "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\""
-                + " style=\"margin:0 0 18px;\"><tr><td bgcolor=\"#fffbeb\" style=\"background-color:#fffbeb;"
-                + "border-left:4px solid #f59e0b;border-radius:4px;padding:12px 14px;font-family:" + FONT
-                + ";font-size:13px;line-height:20px;color:#78350f;" + WRAP + "\">" + html + "</td></tr></table>";
+                + " style=\"margin:0 0 18px;\"><tr><td bgcolor=\"" + background + "\" style=\"background-color:"
+                + background + ";border-left:4px solid " + edge + ";border-radius:4px;padding:12px 14px;font-family:"
+                + FONT + ";font-size:14px;line-height:22px;color:" + ink + ";" + WRAP + "\">" + html
+                + "</td></tr></table>";
     }
 
     /**

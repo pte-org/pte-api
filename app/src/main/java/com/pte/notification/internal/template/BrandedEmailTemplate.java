@@ -9,6 +9,7 @@ import static com.pte.notification.internal.template.EmailLayout.BRAND;
 import static com.pte.notification.internal.template.EmailLayout.MUTED;
 import static com.pte.notification.internal.template.EmailLayout.accountLabel;
 import static com.pte.notification.internal.template.EmailLayout.button;
+import static com.pte.notification.internal.template.EmailLayout.dangerCallout;
 import static com.pte.notification.internal.template.EmailLayout.callout;
 import static com.pte.notification.internal.template.EmailLayout.escape;
 import static com.pte.notification.internal.template.EmailLayout.fallbackLink;
@@ -171,18 +172,44 @@ public final class BrandedEmailTemplate {
         return value == null ? "" : value.replaceAll("[\\r\\n]+", " ").trim();
     }
 
-    public static RenderedEmail applicationRejected(String reason, int year) {
-        String subject = BRAND + " - Update on your application";
+    /**
+     * Rejection mail: names the application, gives the reviewer's reason as plain text, and links back to the
+     * registration page. {@code supportEmail} may be blank, in which case the contact line is left out.
+     */
+    public static RenderedEmail applicationRejected(String organizationName, String requestedCode, String reason,
+            String registerUrl, String supportEmail, int year) {
+        String subject = "[" + BRAND + "] Update on your application - " + singleLine(organizationName);
+        boolean hasSupport = supportEmail != null && !supportEmail.isBlank();
         String rows = heading("Update on your application")
-                + paragraph(BODY, "We can't approve your application at this time.")
-                + fields(new String[][] {{"Reason", reason}})
-                + paragraph(MUTED, "Address the reason above and submit a new application to be reviewed again.");
+                + paragraph(BODY, "Dear " + escape(organizationName) + " team,")
+                + paragraph(BODY, "Thank you for your interest in " + BRAND + ". After reviewing your request, we are"
+                        + " unable to approve your application at this time.")
+                + summary(new String[][] {{"Organization", organizationName, "text"},
+                        {"Requested tenant code", requestedCode, "mono"}, {"Status", "Not approved", "badge-danger"}})
+                + dangerCallout("<strong>Reason</strong><br>" + escape(reason.replace("\r\n", "\n").replace('\r', '\n')).replace("\n", "<br>"))
+                + paragraph(BODY, "You are welcome to address the reason above and submit a new application.")
+                + button(registerUrl, "Submit a new application")
+                + linkHint("Button not working? Copy this link into your browser:", registerUrl)
+                + (hasSupport ? paragraph(BODY, "Think this was a mistake, or need to explain more? Write to "
+                        + mailtoLink(supportEmail) + ".") : "")
+                + paragraph(BODY, "Warm regards,<br>The " + BRAND + " team");
 
-        String text = BRAND + "\n\nUpdate on your application\n"
-                + "We can't approve your application at this time.\n\n"
-                + "Reason: " + reason + "\n\n"
-                + "Address the reason above and submit a new application to be reviewed again.\n";
+        StringBuilder text = new StringBuilder(BRAND).append("\n\nUpdate on your application\n\n")
+                .append("Dear ").append(organizationName).append(" team,\n\n")
+                .append("Thank you for your interest in ").append(BRAND)
+                .append(". After reviewing your request, we are unable to approve your application at this time.\n\n")
+                .append("Organization: ").append(organizationName).append('\n')
+                .append("Requested tenant code: ").append(requestedCode).append('\n')
+                .append("Status: Not approved\n\n")
+                .append("Reason: ").append(reason).append("\n\n")
+                .append("You are welcome to address the reason above and submit a new application: ")
+                .append(registerUrl).append('\n');
+        if (hasSupport) {
+            text.append("\nThink this was a mistake, or need to explain more? Write to ").append(supportEmail)
+                    .append(".\n");
+        }
+        text.append("\nWarm regards,\nThe ").append(BRAND).append(" team\n");
 
-        return new RenderedEmail(subject, text, page("Update on your application", rows, year));
+        return new RenderedEmail(subject, text.toString(), page("Update on your application", rows, year));
     }
 }

@@ -57,7 +57,8 @@ public class TenantApplicationNotificationListener {
 
     @TransactionalEventListener
     public void onApplicationRejected(TenantApplicationRejectedEvent event) {
-        RenderedEmail email = BrandedEmailTemplate.applicationRejected(event.rejectReason(), currentYear());
+        RenderedEmail email = BrandedEmailTemplate.applicationRejected(event.organizationName(), event.requestedCode(),
+                event.rejectReason(), properties.getRegisterUrl(), properties.getSupportEmail(), currentYear());
 
         dispatchService.dispatchExternal(NotificationType.TENANT_APPLICATION_REJECTED, event.contactEmail(), null,
                 dedupeKey(event.applicationPublicId(), "rejected"), email.subject(), email.text(), email.html());

@@ -42,7 +42,7 @@ class TenantApplicationNotificationListenerTest {
         Clock clock = Clock.fixed(Instant.parse("2026-11-01T00:00:00Z"), ZoneOffset.UTC);
         NotificationProperties properties = new NotificationProperties();
         properties.setSupportEmail("help@pte.example");
-        properties.setLoginUrl("https://tenant.example/login");
+        properties.setTenantWebUrl("https://tenant.example/");
         listener = new TenantApplicationNotificationListener(dispatchService, billingSettingsService, properties, clock);
     }
 
@@ -100,8 +100,11 @@ class TenantApplicationNotificationListenerTest {
         verify(dispatchService).dispatchExternal(eq(NotificationType.TENANT_APPLICATION_REJECTED),
                 eq("contact@acme.example"), isNull(), contains(":rejected"), contains("Update"), text.capture(),
                 html.capture());
-        assertThat(text.getValue()).contains("Reason: Missing <b>documents</b>");
-        assertThat(html.getValue()).contains("Missing &lt;b&gt;documents&lt;/b&gt;").doesNotContain("<b>documents");
+        assertThat(text.getValue()).contains("Reason: Missing <b>documents</b>").contains("Status: Not approved")
+                .contains("https://tenant.example/register").contains("help@pte.example");
+        assertThat(html.getValue()).contains("Missing &lt;b&gt;documents&lt;/b&gt;").doesNotContain("<b>documents")
+                .contains("Dear Acme School team").contains("href=\"https://tenant.example/register\"")
+                .contains("Not approved").contains("mailto:help@pte.example");
         assertThat(text.getValue() + html.getValue()).doesNotContain(applicationId.toString());
     }
 }
