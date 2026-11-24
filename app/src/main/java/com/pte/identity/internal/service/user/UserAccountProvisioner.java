@@ -91,7 +91,7 @@ public class UserAccountProvisioner {
             tenancyService.assertCanAddStudents(tenantId, 1L);
         }
         String username = UsernameGenerator.generateUnused(
-                tenancyService.getTenantCode(tenantId), userRepository::existsByUsername);
+                tenancyService.getTenantCode(tenantId), email, userRepository::existsByUsername);
         String temporarySecret = PasswordGenerator.generateReadable();
         User account = newAccount(request, username, temporarySecret, tenantId, roles);
         eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(UUID.randomUUID(),
@@ -204,7 +204,8 @@ public class UserAccountProvisioner {
             UserBulkCreateWriter.Row row, UUID tenantId, String tenantCode) {
         for (int attempt = 0; attempt < UsernameGenerator.COLLISION_RETRIES; attempt++) {
             Optional<UserBulkCreateWriter.Result> result = bulkCreateWriter.createGeneratedStudent(
-                    UsernameGenerator.generate(tenantCode), row, tenantId);
+                    UsernameGenerator.generateUnused(tenantCode, row.email(), userRepository::existsByUsername),
+                    row, tenantId);
             if (result.isPresent()) {
                 return result;
             }

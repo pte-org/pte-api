@@ -249,7 +249,7 @@ public class ScoringReviewReadQueryService {
     }
 
     private boolean isAiEligible(AiEvaluation answer) {
-        return isAiScored(answer.getScoringMethod());
+        return isAiScored(answer.getScoringMethod()) && !answer.isScoredAsBlankAnswer();
     }
 
     private boolean isSubmitted(ExaminerEvaluation score) {

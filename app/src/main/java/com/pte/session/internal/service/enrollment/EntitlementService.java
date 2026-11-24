@@ -1,7 +1,9 @@
 package com.pte.session.internal.service.enrollment;
 
 import com.pte.session.domain.ExamSession;
+import com.pte.session.domain.enums.AttendanceStatus;
 import com.pte.session.dto.response.EntitlementResponse;
+import com.pte.session.internal.exception.enrollment.AttendanceRequiredException;
 import com.pte.session.dto.response.ProctorAssignmentCheckResponse;
 import com.pte.session.internal.exception.enrollment.InvalidSessionCodeException;
 import com.pte.session.internal.exception.enrollment.NotEntitledException;
@@ -18,7 +20,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.util.EnumSet;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -33,6 +37,10 @@ public class EntitlementService {
 
     /** Matches the {@code session_code} column; no generated code is longer. */
     private static final int MAX_SESSION_CODE_LENGTH = 24;
+
+    /** Attendance marks that let a student into a supervised session. */
+    private static final Set<AttendanceStatus> ENTRY_ATTENDANCE = EnumSet.of(AttendanceStatus.PRESENT,
+            AttendanceStatus.LATE);
 
     private final ExamSessionRepository sessionRepository;
     private final ExamRegistrationRepository registrationRepository;
@@ -68,6 +76,7 @@ public class EntitlementService {
         }
         SessionEntryGate.requireOpen(session);
         SessionEntryGate.requireWithinWindow(session, clock.instant());
+        requireCheckedInWhenSupervised(session, studentPublicId);
         return new EntitlementResponse(session.getPublicId(), session.getExamVersionPublicId(), session.getTenantId(),
                 session.getOpensAt(), session.getClosesAt(), SessionMapper.toPolicy(session.getPolicy(),
                         session.getExamMode(), session.getExamMode() == null),
@@ -121,6 +130,20 @@ public class EntitlementService {
             throw new SessionNotFoundException();
         }
         return session.getPublicId();
+    }
+
+    /**
+     * A supervised session lets a student in only after a proctor marked them present or late. A session with
+     * no proctor assigned has nobody to check anyone in, so it stays open to every enrolled student.
+     */
+    private void requireCheckedInWhenSupervised(ExamSession session, UUID studentPublicId) {
+        if (!proctorRepository.existsBySessionIdAndDeletedFalse(session.getId())) {
+            return;
+        }
+        if (!registrationRepository.existsBySessionIdAndStudentPublicIdAndStatusAndAttendanceStatusIn(
+                session.getId(), studentPublicId, AudienceMemberStatus.ENROLLED, ENTRY_ATTENDANCE)) {
+            throw new AttendanceRequiredException();
+        }
     }
 
     private boolean isEnrolled(ExamSession session, UUID studentPublicId) {

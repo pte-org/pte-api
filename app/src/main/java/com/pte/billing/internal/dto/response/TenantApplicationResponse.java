@@ -14,5 +14,8 @@ public record TenantApplicationResponse(
         String status,
         UUID reviewedBy,
         Instant reviewedAt,
-        String rejectReason) {
+        String rejectReason,
+        Instant submittedAt,
+        /** When the review SLA runs out; only set while the application is still waiting for review. */
+        Instant responseDueAt) {
 }

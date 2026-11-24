@@ -146,10 +146,12 @@ class UserServiceTest {
         User user = accountOf(account(1L, userPublicId, null), tenantId, Role.HOST_ADMIN);
         when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(user));
         when(tenancyService.findOrganizationType(tenantId)).thenReturn(Optional.of("SCHOOL"));
+        when(tenancyService.findOrganizationName(tenantId)).thenReturn(Optional.of("Trường Hoa Sen"));
 
         UserResponse response = userService.me(new CurrentUser(userPublicId, tenantId, List.of("HOST_ADMIN")));
 
         assertThat(response.organizationType()).isEqualTo("SCHOOL");
+        assertThat(response.organizationName()).isEqualTo("Trường Hoa Sen");
         assertThat(response.tenantId()).isEqualTo(tenantId);
         assertThat(response.roles()).containsExactly("HOST_ADMIN");
     }
@@ -394,7 +396,7 @@ class UserServiceTest {
     }
 
     @Test
-    void create_staff_getsAGeneratedUsernameInsteadOfTheEmail() {
+    void create_staff_usernameIsTenantCodeAndEmailPrefix() {
         UUID tenantId = UUID.randomUUID();
         CurrentUser caller = host(tenantId);
         CreateUserRequest request = new CreateUserRequest(
@@ -412,7 +414,7 @@ class UserServiceTest {
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
         verify(userRepository).saveAndFlush(saved.capture());
-        assertThat(saved.getValue().getUsername()).matches("school\\.[a-hj-km-np-z2-9]{8}");
+        assertThat(saved.getValue().getUsername()).isEqualTo("school.proctor");
         assertThat(saved.getValue().getEmail()).isEqualTo(request.email());
         verify(tenancyService, never()).assertCanAddStudents(any(), anyLong());
     }
@@ -572,7 +574,7 @@ class UserServiceTest {
     }
 
     @Test
-    void createBulk_givesEveryRowAGeneratedUsername_evenWhenItHasAnEmail() {
+    void createBulk_usernameIsTenantCodeAndEmailPrefix() {
         UUID tenantId = UUID.randomUUID();
         CurrentUser caller = host(tenantId);
         BulkCreateUserRow rowA = row("a@tenant.example");
@@ -594,9 +596,36 @@ class UserServiceTest {
         assertThat(response.skipped()).isEmpty();
         ArgumentCaptor<String> usernames = ArgumentCaptor.forClass(String.class);
         verify(bulkCreateWriter, times(2)).createGeneratedStudent(usernames.capture(), any(), eq(tenantId));
-        assertThat(usernames.getAllValues()).allMatch(username -> username.startsWith("school."));
+        assertThat(usernames.getAllValues()).containsExactly("school.a", "school.b");
         verify(tenancyService).assertCanAddStudents(tenantId, 2L);
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void createBulk_sameEmailPrefixInOneFile_getsNumberedUsernames() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = host(tenantId);
+        BulkCreateUserRow rowA = row("an@one.example");
+        BulkCreateUserRow rowB = row("an@two.example");
+        BulkCreateUsersRequest request = new BulkCreateUsersRequest(List.of(rowA, rowB), null);
+        Set<String> written = new java.util.HashSet<>();
+
+        when(provisioningHelper.resolveTargetTenant(caller, null)).thenReturn(tenantId);
+        when(userRepository.findActiveByOrganizationAndEmails(tenantId, List.of(rowA.email(), rowB.email())))
+                .thenReturn(List.of());
+        when(tenancyService.getTenantCode(tenantId)).thenReturn("school");
+        when(userRepository.existsByUsername(anyString())).thenAnswer(call -> written.contains(call.<String>getArgument(0)));
+        when(bulkCreateWriter.createGeneratedStudent(anyString(), any(UserBulkCreateWriter.Row.class), eq(tenantId)))
+                .thenAnswer(call -> {
+                    String username = call.getArgument(0);
+                    written.add(username);
+                    return Optional.of(writerResult("x", username, "Abcd-2345"));
+                });
+
+        BulkCreateUsersResponse response = userService.createBulk(request, caller);
+
+        assertThat(response.created()).extracting(BulkCreateUsersResponse.CreatedUser::username)
+                .containsExactly("school.an", "school.an2");
     }
 
     @Test
@@ -911,13 +940,31 @@ class UserServiceTest {
     }
 
     @Test
-    void generateStudentCredentials_forAnAccountThatIsNotAStudent_throwsForbidden() {
+    void generateStudentCredentials_forStaffTheCallerManages_rotatesHashWithoutEmail() {
         UUID userPublicId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         User proctor = accountOf(account(1L, userPublicId, "OldPassword123"), tenantId, Role.PROCTOR);
         when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(proctor);
         CurrentUser caller = host(tenantId);
         when(provisioningHelper.canManageTarget(caller, proctor.getRoles())).thenReturn(true);
+
+        GeneratedCredentialsResponse response = userService.generateStudentCredentials(userPublicId, caller);
+
+        assertThat(response.emailQueued()).isFalse();
+        assertThat(passwordEncoder.matches(response.temporaryPassword(), proctor.getCredentialHash())).isTrue();
+        assertThat(proctor.isMustChangePassword()).isTrue();
+        verify(userRepository).save(proctor);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void generateStudentCredentials_forAnAccountTheCallerCannotManage_throwsForbidden() {
+        UUID userPublicId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        User fellowHostAdmin = accountOf(account(1L, userPublicId, "OldPassword123"), tenantId, Role.HOST_ADMIN);
+        when(memberDirectory.requireMember(tenantId, userPublicId)).thenReturn(fellowHostAdmin);
+        CurrentUser caller = host(tenantId);
+        when(provisioningHelper.canManageTarget(caller, fellowHostAdmin.getRoles())).thenReturn(false);
 
         assertThatThrownBy(() -> userService.generateStudentCredentials(userPublicId, caller))
                 .isInstanceOf(ForbiddenPasswordResetException.class);

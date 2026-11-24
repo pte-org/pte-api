@@ -11,10 +11,10 @@ public final class UserMapper {
     }
 
     public static UserResponse toResponse(User user) {
-        return toResponse(user, null);
+        return toResponse(user, null, null);
     }
 
-    public static UserResponse toResponse(User user, String organizationType) {
+    public static UserResponse toResponse(User user, String organizationType, String organizationName) {
         return new UserResponse(
                 user.getPublicId(),
                 user.getUsername(),
@@ -28,6 +28,7 @@ public final class UserMapper {
                 user.getPhone(),
                 user.getDateOfBirth(),
                 organizationType,
+                organizationName,
                 user.isMustChangePassword(),
                 user.isDeleted());
     }

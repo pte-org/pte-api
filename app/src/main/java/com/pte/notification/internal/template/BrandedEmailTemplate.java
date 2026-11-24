@@ -9,12 +9,18 @@ import static com.pte.notification.internal.template.EmailLayout.BRAND;
 import static com.pte.notification.internal.template.EmailLayout.MUTED;
 import static com.pte.notification.internal.template.EmailLayout.accountLabel;
 import static com.pte.notification.internal.template.EmailLayout.button;
+import static com.pte.notification.internal.template.EmailLayout.dangerCallout;
+import static com.pte.notification.internal.template.EmailLayout.callout;
 import static com.pte.notification.internal.template.EmailLayout.escape;
 import static com.pte.notification.internal.template.EmailLayout.fallbackLink;
 import static com.pte.notification.internal.template.EmailLayout.fields;
 import static com.pte.notification.internal.template.EmailLayout.heading;
+import static com.pte.notification.internal.template.EmailLayout.linkHint;
+import static com.pte.notification.internal.template.EmailLayout.mailtoLink;
 import static com.pte.notification.internal.template.EmailLayout.page;
 import static com.pte.notification.internal.template.EmailLayout.paragraph;
+import static com.pte.notification.internal.template.EmailLayout.steps;
+import static com.pte.notification.internal.template.EmailLayout.summary;
 
 /**
  * PTE Prep's card e-mails, in English and short enough to read without scrolling: logo, a few lines, copy-friendly
@@ -67,7 +73,7 @@ public final class BrandedEmailTemplate {
                 + paragraph(BODY, "A temporary password was set for your " + BRAND + " account. Sign in with the"
                         + " details below and <strong>change it right away</strong>.")
                 + fields(new String[][] {{"Username", username}, {"Temporary password", temporaryPassword}})
-                + paragraph(MUTED, "Did not expect this? Contact your centre or administrator.");
+                + paragraph(MUTED, "Did not expect this? Contact your center or administrator.");
 
         String text = BRAND + "\n\n"
                 + (named ? "Hello " + fullName + ",\n" : "Hello,\n")
@@ -78,51 +84,132 @@ public final class BrandedEmailTemplate {
         return new RenderedEmail(subject, text, page("Your temporary login", rows, year));
     }
 
-    /** Approval mail: the Host always gets a new account, so it carries the generated username and password. */
+    /**
+     * Approval mail: the Host always gets a new account, so it carries the generated username and password and a
+     * button to the sign-in page. {@code supportEmail} may be blank, in which case the contact line is left out.
+     */
     public static RenderedEmail applicationApproved(String organizationName, String tenantCode, String username,
-            String temporaryPassword, int year) {
-        String subject = BRAND + " - Your application was approved";
-        String[][] details = {{"Organization", organizationName}, {"Tenant code", tenantCode},
-                {"Username", username}, {"Temporary password", temporaryPassword}};
+            String temporaryPassword, String loginUrl, String supportEmail, int year) {
+        String subject = "[" + BRAND + "] Your application was approved - " + singleLine(organizationName);
+        boolean hasSupport = supportEmail != null && !supportEmail.isBlank();
         String rows = heading("Your application was approved")
-                + paragraph(BODY, "Your organization is ready. Sign in with the details below and <strong>change the"
-                        + " password right away</strong>.")
-                + fields(details);
+                + paragraph(BODY, "Dear " + escape(organizationName) + " team,")
+                + paragraph(BODY, "Congratulations! Your organization is ready on " + BRAND + ". Use the details below"
+                        + " to sign in as Host Admin.")
+                + summary(new String[][] {{"Organization", organizationName, "text"},
+                        {"Tenant code", tenantCode, "mono"}, {"Username", username, "mono"},
+                        {"Temporary password", temporaryPassword, "mono"},
+                        {"Status", "Approved", "badge-success"}})
+                + button(loginUrl, "Sign in to " + BRAND)
+                + linkHint("Button not working? Copy this link into your browser:", loginUrl)
+                + callout("<strong>Keep this password private.</strong> It is temporary: you will be asked to choose a"
+                        + " new one the first time you sign in.")
+                + (hasSupport ? paragraph(BODY, "Need help getting started? Write to " + mailtoLink(supportEmail) + ".")
+                        : "")
+                + paragraph(BODY, "Warm regards,<br>The " + BRAND + " team");
 
-        StringBuilder text = new StringBuilder(BRAND).append("\n\nYour application was approved.\n")
-                .append("Sign in with the details below and change the password right away.\n\n");
-        for (String[] row : details) {
-            text.append(row[0]).append(": ").append(row[1]).append('\n');
+        StringBuilder text = new StringBuilder(BRAND).append("\n\nYour application was approved\n\n")
+                .append("Dear ").append(organizationName).append(" team,\n\n")
+                .append("Congratulations! Your organization is ready on ").append(BRAND)
+                .append(". Use the details below to sign in as Host Admin.\n\n")
+                .append("Organization: ").append(organizationName).append('\n')
+                .append("Tenant code: ").append(tenantCode).append('\n')
+                .append("Username: ").append(username).append('\n')
+                .append("Temporary password: ").append(temporaryPassword).append("\n\n")
+                .append("Sign in: ").append(loginUrl).append("\n\n")
+                .append("Keep this password private. It is temporary: you will be asked to choose a new one the first")
+                .append(" time you sign in.\n");
+        if (hasSupport) {
+            text.append("\nNeed help getting started? Write to ").append(supportEmail).append(".\n");
         }
+        text.append("\nWarm regards,\nThe ").append(BRAND).append(" team\n");
 
         return new RenderedEmail(subject, text.toString(), page("Your application was approved", rows, year));
     }
 
-    public static RenderedEmail applicationReceived(int responseHours, int year) {
-        String subject = BRAND + " - Application received";
+    /**
+     * Confirmation sent when an application is submitted: what we received, what happens next and where to write.
+     * {@code supportEmail} may be blank, in which case the contact line is left out.
+     */
+    public static RenderedEmail applicationReceived(String organizationName, String requestedCode, int responseHours,
+            String supportEmail, int year) {
+        String subject = "[" + BRAND + "] We've received your application - " + singleLine(organizationName);
+        boolean hasSupport = supportEmail != null && !supportEmail.isBlank();
         String rows = heading("Application received")
-                + paragraph(BODY, "Thanks for applying to " + BRAND + ". Our team will review it and reply within <strong>"
-                        + responseHours + " hours</strong>.");
+                + paragraph(BODY, "Dear " + escape(organizationName) + " team,")
+                + paragraph(BODY, "Thank you for choosing " + BRAND + ". We have received your onboarding request with"
+                        + " the details below.")
+                + summary(new String[][] {{"Organization", organizationName, "text"},
+                        {"Requested tenant code", requestedCode, "mono"}, {"Status", "Pending review", "badge"}})
+                + paragraph(BODY, "<strong>What happens next</strong>")
+                + steps(new String[][] {
+                        {"Review:", "our team is checking your details and will reply within <strong>"
+                                + responseHours + " hours</strong>."},
+                        {"Account setup:", "once approved, we will email you the Host Admin sign-in details so you"
+                                + " can set up your center."}})
+                + (hasSupport ? paragraph(BODY, "Questions, or need to change your application? Write to "
+                        + mailtoLink(supportEmail) + ".") : "")
+                + paragraph(BODY, "Warm regards,<br>The " + BRAND + " team");
 
-        String text = BRAND + "\n\nApplication received\n"
-                + "Thanks for applying to " + BRAND + ". Our team will review it and reply within " + responseHours
-                + " hours.\n";
+        String text = BRAND + "\n\nApplication received\n\n"
+                + "Dear " + organizationName + " team,\n\n"
+                + "Thank you for choosing " + BRAND + ". We have received your onboarding request with the details"
+                + " below.\n\n"
+                + "Organization: " + organizationName + "\n"
+                + "Requested tenant code: " + requestedCode + "\n\n"
+                + "What happens next\n"
+                + "- Review: our team is checking your details and will reply within " + responseHours + " hours.\n"
+                + "- Account setup: once approved, we will email you the Host Admin sign-in details so you can set up"
+                + " your center.\n"
+                + (hasSupport ? "\nQuestions, or need to change your application? Write to " + supportEmail + ".\n" : "")
+                + "\nWarm regards,\nThe " + BRAND + " team\n";
 
         return new RenderedEmail(subject, text, page("Application received", rows, year));
     }
 
-    public static RenderedEmail applicationRejected(String reason, int year) {
-        String subject = BRAND + " - Update on your application";
+    /** Header values must stay on one line, whatever the applicant typed. */
+    private static String singleLine(String value) {
+        return value == null ? "" : value.replaceAll("[\\r\\n]+", " ").trim();
+    }
+
+    /**
+     * Rejection mail: names the application, gives the reviewer's reason as plain text, and links back to the
+     * registration page. {@code supportEmail} may be blank, in which case the contact line is left out.
+     */
+    public static RenderedEmail applicationRejected(String organizationName, String requestedCode, String reason,
+            String registerUrl, String supportEmail, int year) {
+        String subject = "[" + BRAND + "] Update on your application - " + singleLine(organizationName);
+        boolean hasSupport = supportEmail != null && !supportEmail.isBlank();
         String rows = heading("Update on your application")
-                + paragraph(BODY, "We can't approve your application at this time.")
-                + fields(new String[][] {{"Reason", reason}})
-                + paragraph(MUTED, "Address the reason above and submit a new application to be reviewed again.");
+                + paragraph(BODY, "Dear " + escape(organizationName) + " team,")
+                + paragraph(BODY, "Thank you for your interest in " + BRAND + ". After reviewing your request, we are"
+                        + " unable to approve your application at this time.")
+                + summary(new String[][] {{"Organization", organizationName, "text"},
+                        {"Requested tenant code", requestedCode, "mono"}, {"Status", "Not approved", "badge-danger"}})
+                + dangerCallout("<strong>Reason</strong><br>" + escape(reason.replace("\r\n", "\n").replace('\r', '\n')).replace("\n", "<br>"))
+                + paragraph(BODY, "You are welcome to address the reason above and submit a new application.")
+                + button(registerUrl, "Submit a new application")
+                + linkHint("Button not working? Copy this link into your browser:", registerUrl)
+                + (hasSupport ? paragraph(BODY, "Think this was a mistake, or need to explain more? Write to "
+                        + mailtoLink(supportEmail) + ".") : "")
+                + paragraph(BODY, "Warm regards,<br>The " + BRAND + " team");
 
-        String text = BRAND + "\n\nUpdate on your application\n"
-                + "We can't approve your application at this time.\n\n"
-                + "Reason: " + reason + "\n\n"
-                + "Address the reason above and submit a new application to be reviewed again.\n";
+        StringBuilder text = new StringBuilder(BRAND).append("\n\nUpdate on your application\n\n")
+                .append("Dear ").append(organizationName).append(" team,\n\n")
+                .append("Thank you for your interest in ").append(BRAND)
+                .append(". After reviewing your request, we are unable to approve your application at this time.\n\n")
+                .append("Organization: ").append(organizationName).append('\n')
+                .append("Requested tenant code: ").append(requestedCode).append('\n')
+                .append("Status: Not approved\n\n")
+                .append("Reason: ").append(reason).append("\n\n")
+                .append("You are welcome to address the reason above and submit a new application: ")
+                .append(registerUrl).append('\n');
+        if (hasSupport) {
+            text.append("\nThink this was a mistake, or need to explain more? Write to ").append(supportEmail)
+                    .append(".\n");
+        }
+        text.append("\nWarm regards,\nThe ").append(BRAND).append(" team\n");
 
-        return new RenderedEmail(subject, text, page("Update on your application", rows, year));
+        return new RenderedEmail(subject, text.toString(), page("Update on your application", rows, year));
     }
 }

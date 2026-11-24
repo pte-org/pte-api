@@ -100,6 +100,25 @@ class GradingCompletionEvaluatorTest {
         assertThat(result.satisfiedItemCount()).isEqualTo(2);
     }
 
+    @Test
+    void aBlankScoredAiRowDoesNotBlockManualExaminerCompletion() {
+        var member = new AttemptGradingCandidateView(attemptId, studentId,
+                "SUBMITTED", "v1", false, null);
+        var coverage = new AttemptGradingCoverageView(attemptId,
+                List.of(new AttemptGradingItemView(itemId, templateId, "WRITE_ESSAY")));
+        AiEvaluation blank = answer(ScoringAnswerStatus.PENDING, "WRITE_ESSAY");
+        blank.markBlankAnswer(Instant.now());
+        GradingAssignment assignment = new GradingAssignment(tenantId, sessionId,
+                attemptId, examinerId, 1, UUID.randomUUID(), Instant.now());
+
+        GradingEvaluation result = evaluator.evaluate(GradingMarkingMode.MANUAL_EXAMINER, List.of(member),
+                Map.of(attemptId, coverage), List.of(blank), List.of(assignment), List.of(), Map.of());
+
+        assertThat(result.complete()).isTrue();
+        assertThat(result.blockingReasons()).isEmpty();
+        assertThat(result.satisfiedItemCount()).isEqualTo(1);
+    }
+
     private AiEvaluation answer(ScoringAnswerStatus status, String taskType) {
         AiEvaluation answer = new AiEvaluation(tenantId, sessionId, attemptId, answerId, itemId, templateId,
                 taskType, "WRITING", ScoringMethod.AI_TEXT);

@@ -13,7 +13,6 @@ public record ProctorWorkspaceSessionResponse(
         SessionStatus status,
         Instant opensAt,
         Instant closesAt,
-        String assignmentRole,
         boolean canMonitor,
         String monitoringBlockingReason
 ) {

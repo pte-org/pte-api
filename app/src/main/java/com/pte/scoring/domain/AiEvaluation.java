@@ -168,6 +168,18 @@ public class AiEvaluation extends AnswerEvaluation {
         this.aiProviderVersion = providerVersion;
     }
 
+    /** Scores an answer the candidate left empty: 0 by rule, no vendor, no rubric trace. */
+    public void markBlankAnswer(Instant now) {
+        markAiScored(0, AiProviderCategory.REAL, ScoringDomainConstants.AI_BLANK_ANSWER_PROVIDER, null, null, now);
+        recordDetail("{}", ScoringDomainConstants.AI_BLANK_ANSWER_FEEDBACK, null, null, false);
+    }
+
+    /** Whether this row holds the by-rule zero of an empty answer, which no examiner or AI run has to look at. */
+    public boolean isScoredAsBlankAnswer() {
+        return status == ScoringAnswerStatus.SCORED
+                && ScoringDomainConstants.AI_BLANK_ANSWER_PROVIDER.equals(aiProvider);
+    }
+
     public boolean hasPublishableAiScore() {
         return status == ScoringAnswerStatus.SCORED && getScore() != null && getScore() >= 0 && getScore() <= 100
                 && aiProviderCategory == AiProviderCategory.REAL && aiProvider != null && !aiProvider.isBlank();

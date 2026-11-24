@@ -110,6 +110,8 @@ class ExamWorkflowServicesTest {
     private ApplicationEventPublisher eventPublisher;
     @Mock
     private TenancyService tenancyService;
+    @Mock
+    private com.pte.session.internal.service.staff.ProctorAssignmentService proctorAssignmentService;
 
     private ExamDraftService draftService;
     private ExamAudienceService audienceService;
@@ -128,7 +130,8 @@ class ExamWorkflowServicesTest {
         AudienceResolver resolver = new AudienceResolver(sourceRepository, registrationRepository,
                 enrollmentModuleService, identityService, startedAttemptLookup);
         draftService = new ExamDraftService(sessionRepository, access, new ExamSkillSelection(), sessionLifecycleService,
-                examDefinitionService, billingService, sessionCodeGenerator, com.pte.TestClocks.fixed());
+                examDefinitionService, billingService, sessionCodeGenerator, proctorAssignmentService,
+                com.pte.TestClocks.fixed());
         audienceService = new ExamAudienceService(sourceRepository, registrationRepository, access, resolver,
                 enrollmentModuleService);
         publishService = new ExamPublishService(sessionRepository, access, sessionLifecycleService,
@@ -179,6 +182,44 @@ class ExamWorkflowServicesTest {
         verify(auditLogService).record(hostAdmin, SessionConstants.AGGREGATE_EXAM_SESSION,
                 response.publicId().toString(), "HK1 mock", "FPT-261010-K7QM",
                 SessionConstants.EVENT_EXAM_DRAFT_CREATED, "HK1 mock");
+    }
+
+    @Test
+    void createDraft_assignsThePickedProctorsToTheNewDraft() {
+        stubTemplateAndSubscription();
+        when(sessionCodeGenerator.generate(tenantId, opensAt)).thenReturn("FPT-261010-K7QM");
+        when(sessionRepository.saveAndFlush(any())).thenAnswer(invocation -> {
+            var session = invocation.getArgument(0, com.pte.session.domain.ExamSession.class);
+            session.setPublicId(UUID.randomUUID());
+            session.setId(10L);
+            return session;
+        });
+        var proctors = List.of(
+                new com.pte.session.internal.dto.request.AssignProctorRequest(UUID.randomUUID()),
+                new com.pte.session.internal.dto.request.AssignProctorRequest(UUID.randomUUID()));
+
+        draftService.createDraft(new CreateExamDraftRequest(
+                "HK1 mock", templateId, subscriptionId, opensAt, closesAt, ExamMode.OFFICIAL_EXAM, null, "HK1-2026",
+                50, null, null, null, null, null, proctors), hostAdmin);
+
+        verify(proctorAssignmentService).assignAtCreation(any(com.pte.session.domain.ExamSession.class),
+                eq(proctors));
+    }
+
+    @Test
+    void createDraft_aProctorThatCannotBeAssigned_failsTheWholeCreation() {
+        stubTemplateAndSubscription();
+        when(sessionCodeGenerator.generate(tenantId, opensAt)).thenReturn("FPT-261010-K7QM");
+        when(sessionRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(new com.pte.session.internal.exception.staff.AlreadyAssignedException())
+                .when(proctorAssignmentService).assignAtCreation(any(), any());
+
+        assertThatThrownBy(() -> draftService.createDraft(new CreateExamDraftRequest(
+                "HK1 mock", templateId, subscriptionId, opensAt, closesAt, ExamMode.OFFICIAL_EXAM, null, "HK1-2026",
+                50, null, null, null, null, null, List.of()), hostAdmin))
+                .isInstanceOf(com.pte.session.internal.exception.staff.AlreadyAssignedException.class);
+
+        verifyNoInteractions(auditLogService);
     }
 
     @Test

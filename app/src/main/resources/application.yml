@@ -153,6 +153,9 @@ spring:
 
 notification:
   mail-from: ${MAIL_FROM:no-reply@pteprep.local}
+  support-email: ${SUPPORT_EMAIL:support@pteprep.local}
+  # Same variable the password-reset links use; emails append /login and /register to it.
+  tenant-web-url: ${APP_WEB_TENANT_URL:http://localhost:3000}
   inbox:
     # Enable after additive migration and the notification rollout checks; email delivery is independent.
     enabled: ${NOTIFICATION_INBOX_ENABLED:false}

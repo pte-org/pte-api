@@ -6,6 +6,24 @@ SELECT 'a1b2c3d4-0003-4000-8000-000000000001'::uuid, 'PTE Local Exam Package', '
        'EXAM_PACKAGE', 0, 'VND', 365, 50, 'ACTIVE', 0, false, now(), now()
 WHERE NOT EXISTS (SELECT 1 FROM public.service_plans WHERE public_id = 'a1b2c3d4-0003-4000-8000-000000000001'::uuid)
 @@
+INSERT INTO public.service_plans (public_id, name, description, type, price, currency, extra_student_slots,
+                                  status, version, deleted, created_at, updated_at)
+SELECT 'a1b2c3d4-0003-4000-8000-000000000010'::uuid, 'Starter (500 users)', 'Starter capacity package for organizations',
+       'STUDENT_CAPACITY', 0, 'VND', 500, 'ACTIVE', 0, false, now(), now()
+WHERE NOT EXISTS (SELECT 1 FROM public.service_plans WHERE public_id = 'a1b2c3d4-0003-4000-8000-000000000010'::uuid)
+@@
+INSERT INTO public.service_plans (public_id, name, description, type, price, currency, extra_student_slots,
+                                  status, version, deleted, created_at, updated_at)
+SELECT 'a1b2c3d4-0003-4000-8000-000000000020'::uuid, 'Professional (1000 users)', 'Professional capacity package for organizations',
+       'STUDENT_CAPACITY', 0, 'VND', 1000, 'ACTIVE', 0, false, now(), now()
+WHERE NOT EXISTS (SELECT 1 FROM public.service_plans WHERE public_id = 'a1b2c3d4-0003-4000-8000-000000000020'::uuid)
+@@
+INSERT INTO public.service_plans (public_id, name, description, type, price, currency, extra_student_slots,
+                                  status, version, deleted, created_at, updated_at)
+SELECT 'a1b2c3d4-0003-4000-8000-000000000030'::uuid, 'Enterprise (Unlimited)', 'Enterprise capacity package for organizations',
+       'STUDENT_CAPACITY', 0, 'VND', 2000, 'ACTIVE', 0, false, now(), now()
+WHERE NOT EXISTS (SELECT 1 FROM public.service_plans WHERE public_id = 'a1b2c3d4-0003-4000-8000-000000000030'::uuid)
+@@
 INSERT INTO public.subscriptions (public_id, tenant_id, plan_id, license_key, starts_at, expires_at,
                                   max_students_per_session, status, activation_source, deleted, created_at, updated_at)
 SELECT gen_random_uuid(), o.public_id, 'a1b2c3d4-0003-4000-8000-000000000001'::uuid, 'PTE-LOCAL-E2E-SUB-0001',

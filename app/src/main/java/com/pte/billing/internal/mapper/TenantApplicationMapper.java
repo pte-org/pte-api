@@ -4,6 +4,9 @@ import com.pte.billing.domain.enums.TenantApplicationStatus;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.tenancy.domain.Organization;
 
+import java.time.Duration;
+import java.time.Instant;
+
 /** Presents an organization that went through the onboarding application as an application record. */
 public final class TenantApplicationMapper {
 
@@ -11,6 +14,10 @@ public final class TenantApplicationMapper {
     }
 
     public static TenantApplicationResponse toResponse(Organization application) {
+        return toResponse(application, null);
+    }
+
+    public static TenantApplicationResponse toResponse(Organization application, Instant responseDueAt) {
         return new TenantApplicationResponse(
                 application.getPublicId(),
                 application.getName(),
@@ -22,7 +29,9 @@ public final class TenantApplicationMapper {
                 statusOf(application).name(),
                 application.getReviewedBy(),
                 application.getReviewedAt(),
-                application.getRejectReason());
+                application.getRejectReason(),
+                application.getCreatedAt(),
+                responseDueAt);
     }
 
     /** ACTIVE and SUSPENDED organizations were both approved applications. */

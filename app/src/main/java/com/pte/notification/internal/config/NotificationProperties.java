@@ -12,6 +12,44 @@ public class NotificationProperties {
     @NotBlank
     private String mailFrom = "no-reply@pteprep.local";
 
+    /** Address applicants are told to write to; shown in customer-facing emails. */
+    @NotBlank
+    private String supportEmail = "support@pteprep.local";
+
+    public String getSupportEmail() {
+        return supportEmail;
+    }
+
+    public void setSupportEmail(String supportEmail) {
+        this.supportEmail = supportEmail;
+    }
+
+    /** Base URL of the tenant web app; the approval and rejection emails link to its /login and /register pages. */
+    @NotBlank
+    private String tenantWebUrl = "http://localhost:3000";
+
+    public String getTenantWebUrl() {
+        return tenantWebUrl;
+    }
+
+    public void setTenantWebUrl(String tenantWebUrl) {
+        this.tenantWebUrl = tenantWebUrl;
+    }
+
+    /** Sign-in page linked from the approval email. */
+    public String getLoginUrl() {
+        return stripTrailingSlash(tenantWebUrl) + "/login";
+    }
+
+    /** Registration page linked from the rejection email, so an applicant can submit again. */
+    public String getRegisterUrl() {
+        return stripTrailingSlash(tenantWebUrl) + "/register";
+    }
+
+    private static String stripTrailingSlash(String url) {
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+    }
+
     public String getMailFrom() {
         return mailFrom;
     }

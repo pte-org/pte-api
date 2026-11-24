@@ -53,7 +53,6 @@ final class ProctorSessionViews {
 
     static ProctorWorkspaceSessionView toWorkspaceSessionView(ExamSessionProctor pa, Instant asOf) {
         ExamSession s = pa.getSession();
-        String roleStr = pa.getRole() != null ? pa.getRole().name() : null;
         boolean canMon = canMonitor(s, asOf);
         String reason = monitoringBlockingReason(s, asOf);
         return new ProctorWorkspaceSessionView(
@@ -64,7 +63,6 @@ final class ProctorSessionViews {
                 s.getStatus(),
                 s.getOpensAt(),
                 s.getClosesAt(),
-                roleStr,
                 canMon,
                 reason);
     }

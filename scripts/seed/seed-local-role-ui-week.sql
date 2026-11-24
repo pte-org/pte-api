@@ -114,8 +114,8 @@ BEGIN
       INSERT INTO exam_session_selected_skills SELECT session_id,s.skill
         FROM exam_session_selected_skills s WHERE s.session_id=source_session.id;
       INSERT INTO exam_session_proctors(public_id,created_at,updated_at,deleted,
-        proctor_public_id,role,tenant_id,session_id)
-        VALUES(gen_random_uuid(),now(),now(),false,proctor_id,'LEAD_PROCTOR',tenant,session_id);
+        proctor_public_id,tenant_id,session_id)
+        VALUES(gen_random_uuid(),now(),now(),false,proctor_id,tenant,session_id);
 
       FOR n IN 1..CASE WHEN k=3 THEN 4 WHEN k=2 THEN 3 ELSE 6 END LOOP
         SELECT public_id INTO STRICT student_id FROM users
