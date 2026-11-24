@@ -6,6 +6,7 @@ import com.pte.billing.internal.dto.request.application.RejectApplicationRequest
 import com.pte.billing.internal.dto.request.application.SubmitApplicationRequest;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.constant.BillingConstants;
+import com.pte.billing.internal.exception.application.ApplicationEmailAlreadyPendingException;
 import com.pte.billing.internal.exception.application.ApplicationNotPendingException;
 import com.pte.billing.internal.exception.license.RequestedCodeAlreadyUsedException;
 import com.pte.billing.internal.exception.application.RequestedNameAlreadyUsedException;
@@ -106,6 +107,26 @@ class TenantApplicationServiceTest {
 
         assertThatThrownBy(() -> service.submit(submitRequest("acme")))
                 .isInstanceOf(RequestedCodeAlreadyUsedException.class);
+        verify(tenancyService, never()).submitApplication(any(), any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    void submit_taxCodeHeldByPendingOrApprovedOrganization_throwsWithoutSaving() {
+        when(tenancyService.existsByTaxCode("0123456789")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.submit(submitRequest("acme")))
+                .isInstanceOf(RequestedTaxCodeAlreadyUsedException.class);
+        verify(tenancyService, never()).submitApplication(any(), any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    void submit_emailWithApplicationAlreadyPending_throwsWithoutSaving() {
+        when(tenancyService.hasPendingApplicationForEmail("contact@acme.example")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.submit(submitRequest("acme")))
+                .isInstanceOf(ApplicationEmailAlreadyPendingException.class);
         verify(tenancyService, never()).submitApplication(any(), any(), any(), any(), any(), any());
         verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
@@ -256,7 +277,7 @@ class TenantApplicationServiceTest {
         when(tenancyService.findApplicationForUpdate(applicationId)).thenReturn(Optional.of(application));
         when(platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY)).thenReturn(75);
         when(tenancyService.approveApplication(eq(application), any(), anyInt()))
-                .thenThrow(new DataIntegrityViolationException("uq_org_tax_code_approved"));
+                .thenThrow(new DataIntegrityViolationException("uq_org_tax_code_live"));
 
         assertThatThrownBy(() -> service.approve(applicationId,
                 new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"))))

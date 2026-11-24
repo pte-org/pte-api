@@ -50,6 +50,16 @@ public class TenancyService {
         return organizationRepository.existsByNameAndStatusNot(name, OrganizationStatus.REJECTED);
     }
 
+    /** Is this tax code already held by an application under review or an approved tenant? A rejection frees it. */
+    public boolean existsByTaxCode(String taxCode) {
+        return organizationRepository.existsByTaxCodeAndStatusNot(taxCode, OrganizationStatus.REJECTED);
+    }
+
+    /** Does this contact email already have an application waiting for review? */
+    public boolean hasPendingApplicationForEmail(String contactEmail) {
+        return organizationRepository.existsByContactEmailIgnoreCaseAndStatus(contactEmail, OrganizationStatus.PENDING);
+    }
+
     /** Reuses the tenant lock; acquire before identity locks when guarding tenant-owned delivery. */
     @Transactional(propagation = Propagation.MANDATORY)
     public boolean lockActiveTenant(UUID tenantPublicId) {

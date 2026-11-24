@@ -35,6 +35,8 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
 
     boolean existsByTaxCodeAndStatusNot(String taxCode, OrganizationStatus status);
 
+    boolean existsByContactEmailIgnoreCaseAndStatus(String contactEmail, OrganizationStatus status);
+
     boolean existsByTaxCodeAndStatusInAndPublicIdNot(String taxCode, Collection<OrganizationStatus> statuses,
             UUID excludedPublicId);
 

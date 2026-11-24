@@ -89,7 +89,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_org_code_live ON public.organizations (code
 @@
 CREATE UNIQUE INDEX IF NOT EXISTS uq_org_name_live ON public.organizations (name) WHERE status <> 'REJECTED'
 @@
-CREATE UNIQUE INDEX IF NOT EXISTS uq_org_tax_code_approved ON public.organizations (tax_code) WHERE status IN ('ACTIVE', 'SUSPENDED')
+CREATE UNIQUE INDEX IF NOT EXISTS uq_org_tax_code_live ON public.organizations (tax_code) WHERE status <> 'REJECTED'
 @@
 @@
 CREATE UNIQUE INDEX IF NOT EXISTS uq_notifications_event_key ON public.notifications (event_key)
