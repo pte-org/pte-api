@@ -153,6 +153,8 @@ spring:
 notification:
   mail-from: ${MAIL_FROM:no-reply@pteprep.local}
   support-email: ${SUPPORT_EMAIL:support@pteprep.local}
+  # Defaults to the tenant web's /login so one variable (APP_WEB_TENANT_URL) is enough in most deployments.
+  login-url: ${HOST_LOGIN_URL:${APP_WEB_TENANT_URL:http://localhost:3000}/login}
   inbox:
     # Enable after additive migration and the notification rollout checks; email delivery is independent.
     enabled: ${NOTIFICATION_INBOX_ENABLED:false}

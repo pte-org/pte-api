@@ -47,7 +47,8 @@ public class TenantApplicationNotificationListener {
     @TransactionalEventListener
     public void onApplicationApproved(TenantApplicationApprovedEvent event) {
         RenderedEmail email = BrandedEmailTemplate.applicationApproved(event.organizationName(), event.tenantCode(),
-                event.hostAdminUsername(), event.hostAdminPassword(), currentYear());
+                event.hostAdminUsername(), event.hostAdminPassword(), properties.getLoginUrl(),
+                properties.getSupportEmail(), currentYear());
 
         dispatchService.dispatchExternalSensitive(NotificationType.TENANT_APPLICATION_APPROVED, event.contactEmail(),
                 event.tenantPublicId(), dedupeKey(event.applicationPublicId(), "approved"), email.subject(),

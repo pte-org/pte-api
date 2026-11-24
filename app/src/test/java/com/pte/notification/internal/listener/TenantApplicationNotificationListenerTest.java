@@ -42,6 +42,7 @@ class TenantApplicationNotificationListenerTest {
         Clock clock = Clock.fixed(Instant.parse("2026-11-01T00:00:00Z"), ZoneOffset.UTC);
         NotificationProperties properties = new NotificationProperties();
         properties.setSupportEmail("help@pte.example");
+        properties.setLoginUrl("https://tenant.example/login");
         listener = new TenantApplicationNotificationListener(dispatchService, billingSettingsService, properties, clock);
     }
 
@@ -80,8 +81,11 @@ class TenantApplicationNotificationListenerTest {
                 eq("contact@acme.example"), org.mockito.ArgumentMatchers.any(UUID.class), contains(":approved"),
                 contains("approved"), text.capture(), html.capture());
         assertThat(text.getValue()).contains("Tenant code: acme").contains("Username: acme.k7m2p9qx")
-                .contains("Temporary password: Gener4ted!");
-        assertThat(html.getValue()).contains("<!DOCTYPE html>").contains("Gener4ted!").contains("Acme School");
+                .contains("Temporary password: Gener4ted!").contains("Sign in: https://tenant.example/login")
+                .contains("help@pte.example");
+        assertThat(html.getValue()).contains("<!DOCTYPE html>").contains("Gener4ted!").contains("Acme School")
+                .contains("href=\"https://tenant.example/login\"").contains("Approved")
+                .contains("Dear Acme School team").contains("mailto:help@pte.example");
         assertThat(text.getValue() + html.getValue()).doesNotContain(applicationId.toString());
     }
 

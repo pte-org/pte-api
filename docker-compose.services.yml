@@ -118,6 +118,7 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-no-reply@pteprep.local}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL:-support@pteprep.local}
+      HOST_LOGIN_URL: ${HOST_LOGIN_URL:-http://localhost:3000/login}
       MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-false}
       MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-false}
       MAIL_SMTP_STARTTLS_REQUIRED: ${MAIL_SMTP_STARTTLS_REQUIRED:-false}

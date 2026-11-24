@@ -9,10 +9,12 @@ import static com.pte.notification.internal.template.EmailLayout.BRAND;
 import static com.pte.notification.internal.template.EmailLayout.MUTED;
 import static com.pte.notification.internal.template.EmailLayout.accountLabel;
 import static com.pte.notification.internal.template.EmailLayout.button;
+import static com.pte.notification.internal.template.EmailLayout.callout;
 import static com.pte.notification.internal.template.EmailLayout.escape;
 import static com.pte.notification.internal.template.EmailLayout.fallbackLink;
 import static com.pte.notification.internal.template.EmailLayout.fields;
 import static com.pte.notification.internal.template.EmailLayout.heading;
+import static com.pte.notification.internal.template.EmailLayout.linkHint;
 import static com.pte.notification.internal.template.EmailLayout.mailtoLink;
 import static com.pte.notification.internal.template.EmailLayout.page;
 import static com.pte.notification.internal.template.EmailLayout.paragraph;
@@ -81,22 +83,45 @@ public final class BrandedEmailTemplate {
         return new RenderedEmail(subject, text, page("Your temporary login", rows, year));
     }
 
-    /** Approval mail: the Host always gets a new account, so it carries the generated username and password. */
+    /**
+     * Approval mail: the Host always gets a new account, so it carries the generated username and password and a
+     * button to the sign-in page. {@code supportEmail} may be blank, in which case the contact line is left out.
+     */
     public static RenderedEmail applicationApproved(String organizationName, String tenantCode, String username,
-            String temporaryPassword, int year) {
-        String subject = BRAND + " - Your application was approved";
-        String[][] details = {{"Organization", organizationName}, {"Tenant code", tenantCode},
-                {"Username", username}, {"Temporary password", temporaryPassword}};
+            String temporaryPassword, String loginUrl, String supportEmail, int year) {
+        String subject = "[" + BRAND + "] Your application was approved - " + singleLine(organizationName);
+        boolean hasSupport = supportEmail != null && !supportEmail.isBlank();
         String rows = heading("Your application was approved")
-                + paragraph(BODY, "Your organization is ready. Sign in with the details below and <strong>change the"
-                        + " password right away</strong>.")
-                + fields(details);
+                + paragraph(BODY, "Dear " + escape(organizationName) + " team,")
+                + paragraph(BODY, "Congratulations! Your organization is ready on " + BRAND + ". Use the details below"
+                        + " to sign in as Host Admin.")
+                + summary(new String[][] {{"Organization", organizationName, "text"},
+                        {"Tenant code", tenantCode, "mono"}, {"Username", username, "mono"},
+                        {"Temporary password", temporaryPassword, "mono"},
+                        {"Status", "Approved", "badge-success"}})
+                + button(loginUrl, "Sign in to " + BRAND)
+                + linkHint("Button not working? Copy this link into your browser:", loginUrl)
+                + callout("<strong>Keep this password private.</strong> It is temporary: you will be asked to choose a"
+                        + " new one the first time you sign in.")
+                + (hasSupport ? paragraph(BODY, "Need help getting started? Write to " + mailtoLink(supportEmail) + ".")
+                        : "")
+                + paragraph(BODY, "Warm regards,<br>The " + BRAND + " team");
 
-        StringBuilder text = new StringBuilder(BRAND).append("\n\nYour application was approved.\n")
-                .append("Sign in with the details below and change the password right away.\n\n");
-        for (String[] row : details) {
-            text.append(row[0]).append(": ").append(row[1]).append('\n');
+        StringBuilder text = new StringBuilder(BRAND).append("\n\nYour application was approved\n\n")
+                .append("Dear ").append(organizationName).append(" team,\n\n")
+                .append("Congratulations! Your organization is ready on ").append(BRAND)
+                .append(". Use the details below to sign in as Host Admin.\n\n")
+                .append("Organization: ").append(organizationName).append('\n')
+                .append("Tenant code: ").append(tenantCode).append('\n')
+                .append("Username: ").append(username).append('\n')
+                .append("Temporary password: ").append(temporaryPassword).append("\n\n")
+                .append("Sign in: ").append(loginUrl).append("\n\n")
+                .append("Keep this password private. It is temporary: you will be asked to choose a new one the first")
+                .append(" time you sign in.\n");
+        if (hasSupport) {
+            text.append("\nNeed help getting started? Write to ").append(supportEmail).append(".\n");
         }
+        text.append("\nWarm regards,\nThe ").append(BRAND).append(" team\n");
 
         return new RenderedEmail(subject, text.toString(), page("Your application was approved", rows, year));
     }

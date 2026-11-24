@@ -24,6 +24,18 @@ public class NotificationProperties {
         this.supportEmail = supportEmail;
     }
 
+    /** Sign-in page linked from the approval email; change per environment. */
+    @NotBlank
+    private String loginUrl = "http://localhost:3000/login";
+
+    public String getLoginUrl() {
+        return loginUrl;
+    }
+
+    public void setLoginUrl(String loginUrl) {
+        this.loginUrl = loginUrl;
+    }
+
     public String getMailFrom() {
         return mailFrom;
     }

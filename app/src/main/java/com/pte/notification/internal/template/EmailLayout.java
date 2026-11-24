@@ -23,8 +23,9 @@ final class EmailLayout {
     private static final String MONO = "Consolas,Menlo,'Courier New',monospace";
     private static final String PAGE = "#f2f5f9";
     private static final String CARD = "#ffffff";
-    private static final String ACTION = "#0d6fbe";
+    /** The one brand blue: logo wordmark, buttons, links and step numbers all use it. */
     private static final String BRAND_INK = "#3359d2";
+    private static final String ACTION = BRAND_INK;
     private static final String HEADING = "#111827";
     private static final String RULE = "#d9dee7";
     private static final String WRAP = "word-break:break-word;overflow-wrap:anywhere;";
@@ -112,6 +113,17 @@ final class EmailLayout {
                 + "</td></tr></table>";
     }
 
+    /**
+     * "Button not working?" hint with its link: tight to the hint above so the two read as one group, and a wider gap
+     * below to set it apart from what follows. The URL may be long, so it breaks anywhere instead of overflowing.
+     */
+    static String linkHint(String hint, String url) {
+        return "<p style=\"margin:0 0 6px;font-family:" + FONT + ";font-size:14px;line-height:22px;color:" + MUTED + ";"
+                + WRAP + "\">" + hint + "</p>"
+                + "<p style=\"margin:0 0 22px;font-family:" + MONO + ";font-size:12px;line-height:18px;color:" + BODY
+                + ";word-break:break-all;\">" + escape(url) + "</p>";
+    }
+
     static String fallbackLink(String username, String url) {
         String prefix = username == null ? "" : plain(username) + ": ";
         return "<p style=\"margin:0 0 8px;font-family:" + MONO + ";font-size:12px;line-height:18px;color:" + BODY
@@ -161,8 +173,8 @@ final class EmailLayout {
 
     /**
      * One grey card of label and value rows split by hairlines. A row's third element picks how its value looks:
-     * {@code "text"} (bold sans-serif), {@code "mono"} (an identifier the reader may copy) or {@code "badge"} (a
-     * status pill). Values are escaped here.
+     * {@code "text"} (bold sans-serif), {@code "mono"} (an identifier the reader may copy), {@code "badge"} (an
+     * amber status pill) or {@code "badge-success"} (a green one). Values are escaped here.
      */
     static String summary(String[][] rows) {
         StringBuilder html = new StringBuilder("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\""
@@ -183,12 +195,25 @@ final class EmailLayout {
         return switch (kind) {
             case "mono" -> "font-family:" + MONO + ";font-size:14px;line-height:20px;font-weight:700;color:" + HEADING
                     + ";word-break:break-all;\">" + plain(value);
-            case "badge" -> "\"><span style=\"display:inline-block;padding:2px 10px;border-radius:999px;"
-                    + "background-color:#fef3c7;font-family:" + FONT + ";font-size:12px;line-height:18px;"
-                    + "font-weight:700;color:#92400e;\">" + escape(value) + "</span>";
+            case "badge" -> badge(value, "#fef3c7", "#92400e");
+            case "badge-success" -> badge(value, "#d1fae5", "#065f46");
             default -> "font-family:" + FONT + ";font-size:14px;line-height:20px;font-weight:700;color:" + HEADING
                     + ";" + WRAP + "\">" + plain(value);
         };
+    }
+
+    private static String badge(String value, String background, String color) {
+        return "\"><span style=\"display:inline-block;padding:2px 10px;border-radius:999px;background-color:"
+                + background + ";font-family:" + FONT + ";font-size:12px;line-height:18px;font-weight:700;color:"
+                + color + ";\">" + escape(value) + "</span>";
+    }
+
+    /** A pale amber note with a darker left edge, for the one thing the reader must not miss. */
+    static String callout(String html) {
+        return "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\""
+                + " style=\"margin:0 0 18px;\"><tr><td bgcolor=\"#fffbeb\" style=\"background-color:#fffbeb;"
+                + "border-left:4px solid #f59e0b;border-radius:4px;padding:12px 14px;font-family:" + FONT
+                + ";font-size:13px;line-height:20px;color:#78350f;" + WRAP + "\">" + html + "</td></tr></table>";
     }
 
     /**
