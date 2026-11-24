@@ -106,6 +106,71 @@ class ProctorAssignmentServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void assignAtCreation_savesEveryPickedProctorWithTheirRole() {
+        UUID tenantId = UUID.randomUUID();
+        ExamSession session = session(1L, UUID.randomUUID(), tenantId);
+        UUID lead = UUID.randomUUID();
+        UUID assistant = UUID.randomUUID();
+
+        proctorService.assignAtCreation(session, List.of(
+                new AssignProctorRequest(lead, ProctorRole.LEAD_PROCTOR),
+                new AssignProctorRequest(assistant, null)));
+
+        org.mockito.ArgumentCaptor<List<ExamSessionProctor>> saved = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(proctorRepository).saveAll(saved.capture());
+        assertThat(saved.getValue()).extracting(ExamSessionProctor::getProctorPublicId)
+                .containsExactly(lead, assistant);
+        assertThat(saved.getValue()).extracting(ExamSessionProctor::getRole)
+                .containsExactly(ProctorRole.LEAD_PROCTOR, ProctorRole.ASSISTANT_PROCTOR);
+        assertThat(saved.getValue()).allSatisfy(assignment -> {
+            assertThat(assignment.getSession()).isSameAs(session);
+            assertThat(assignment.getTenantId()).isEqualTo(tenantId);
+        });
+    }
+
+    @Test
+    void assignAtCreation_withNoProctors_doesNothing() {
+        ExamSession session = session(1L, UUID.randomUUID(), UUID.randomUUID());
+
+        proctorService.assignAtCreation(session, null);
+        proctorService.assignAtCreation(session, List.of());
+
+        verify(proctorRepository, never()).saveAll(any());
+        org.mockito.Mockito.verifyNoInteractions(identityService);
+    }
+
+    @Test
+    void assignAtCreation_rejectsAnIneligibleProctorBeforeSavingAny() {
+        UUID tenantId = UUID.randomUUID();
+        ExamSession session = session(1L, UUID.randomUUID(), tenantId);
+        UUID eligible = UUID.randomUUID();
+        UUID ineligible = UUID.randomUUID();
+        org.mockito.Mockito.doNothing().when(identityService).requireActiveProctorInTenant(eligible, tenantId);
+        doThrow(new IdentityService.IdentityNotEligibleException()).when(identityService)
+                .requireActiveProctorInTenant(ineligible, tenantId);
+
+        assertThatThrownBy(() -> proctorService.assignAtCreation(session, List.of(
+                new AssignProctorRequest(eligible, null), new AssignProctorRequest(ineligible, null))))
+                .isInstanceOf(IdentityService.IdentityNotEligibleException.class);
+
+        verify(proctorRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void assignAtCreation_rejectsTheSameProctorPickedTwice() {
+        ExamSession session = session(1L, UUID.randomUUID(), UUID.randomUUID());
+        UUID proctor = UUID.randomUUID();
+
+        assertThatThrownBy(() -> proctorService.assignAtCreation(session, List.of(
+                new AssignProctorRequest(proctor, null),
+                new AssignProctorRequest(proctor, ProctorRole.LEAD_PROCTOR))))
+                .isInstanceOf(com.pte.session.internal.exception.staff.AlreadyAssignedException.class);
+
+        verify(proctorRepository, never()).saveAll(any());
+    }
+
+    @Test
     void updateProctorRole_updates() {
         UUID tenantId = UUID.randomUUID();
         UUID sessionPublicId = UUID.randomUUID();

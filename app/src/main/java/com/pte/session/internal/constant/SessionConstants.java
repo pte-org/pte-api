@@ -168,7 +168,8 @@ public final class SessionConstants {
     public static final String CEFR_TARGET_DUPLICATE_LEVEL = "A CEFR level can appear only once";
     public static final String CEFR_TARGET_NOT_100 = "The CEFR percentages must sum to 100";
     public static final String SKILLS_SIZE_INVALID = "Between 1 and 4 skills must be selected";
-    public static final String SKILLS_DUPLICATE = "Select each skill only once.";
+    public static final String PROCTORS_SIZE_INVALID = "At most 50 proctors can be assigned when creating an exam";
+    public static final String SKILLS_DUPLICATE ="Select each skill only once.";
     public static final String SKILLS_NOT_IN_TEMPLATE = "Choose only skills included in the selected exam template.";
     public static final String SKILLS_FULL_TEMPLATE_REQUIRED =
             "Mock and official exams must include every skill in the selected template.";
