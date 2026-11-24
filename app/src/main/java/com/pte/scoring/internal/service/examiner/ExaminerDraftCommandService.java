@@ -21,7 +21,6 @@ import com.pte.scoring.dto.response.ExaminerDraftResponse;
 import com.pte.scoring.dto.response.ExaminerWorkflowView;
 import com.pte.scoring.internal.repository.ExaminerEvaluationRepository;
 import com.pte.scoring.internal.repository.GradingAssignmentRepository;
-import com.pte.scoring.internal.repository.GradingIssueRepository;
 import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.scoring.dto.response.ExaminerGradingAuditMetadata;
 import com.pte.scoring.internal.constant.ExaminerScoringConstants;
@@ -64,7 +63,6 @@ public class ExaminerDraftCommandService {
     public ExaminerDraftCommandService(
             SessionService sessionService,
             GradingAssignmentRepository assignmentRepository,
-            GradingIssueRepository issueRepository,
             ExaminerEvaluationRepository evaluationRepository,
             AiEvaluationRepository answerRepository,
             SessionGradingGateway gateway,
@@ -90,7 +88,7 @@ public class ExaminerDraftCommandService {
         this.traits = traits;
         this.freshness = freshness;
         this.responses = responses;
-        this.workGuard = new ExaminerWorkGuard(assignmentRepository, issueRepository, answerRepository, gateway,
+        this.workGuard = new ExaminerWorkGuard(assignmentRepository, answerRepository, gateway,
                 attemptService, eligibilityQueryService);
     }
 

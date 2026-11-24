@@ -4,8 +4,6 @@ import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.AttemptGradingCandidateView;
 import com.pte.scoring.domain.AiEvaluation;
 import com.pte.scoring.domain.GradingAssignment;
-import com.pte.scoring.domain.GradingIssue;
-import com.pte.scoring.domain.enums.ExaminerGradingIssueStatus;
 import com.pte.scoring.domain.enums.ExaminerWorkflowStatus;
 import com.pte.scoring.domain.enums.GradingCohortStatus;
 import com.pte.scoring.domain.enums.GradingMarkingMode;
@@ -13,7 +11,6 @@ import com.pte.scoring.dto.request.FinalizeExaminerWorkRequest;
 import com.pte.scoring.internal.constant.ExaminerScoringConstants;
 import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import com.pte.scoring.internal.repository.GradingAssignmentRepository;
-import com.pte.scoring.internal.repository.GradingIssueRepository;
 import com.pte.scoring.internal.service.grading.SessionGradingGateway;
 import com.pte.scoring.internal.service.staff.ScoringEligibilityQueryService;
 import com.pte.shared.security.CurrentUser;
@@ -27,22 +24,20 @@ import java.util.stream.Collectors;
 
 /**
  * Preconditions of Examiner draft and finalize commands: the assignment row lock, the publication guard and the
- * finalize checks (cohort, membership, work state, open issues, answer manifest). Runs in the caller's transaction.
+ * finalize checks (cohort, membership, work state, answer manifest). Runs in the caller's transaction.
  */
 class ExaminerWorkGuard {
 
     private final GradingAssignmentRepository assignmentRepository;
-    private final GradingIssueRepository issueRepository;
     private final AiEvaluationRepository answerRepository;
     private final SessionGradingGateway gateway;
     private final AttemptService attemptService;
     private final ScoringEligibilityQueryService eligibilityQueryService;
 
-    ExaminerWorkGuard(GradingAssignmentRepository assignmentRepository, GradingIssueRepository issueRepository,
+    ExaminerWorkGuard(GradingAssignmentRepository assignmentRepository,
             AiEvaluationRepository answerRepository, SessionGradingGateway gateway, AttemptService attemptService,
             ScoringEligibilityQueryService eligibilityQueryService) {
         this.assignmentRepository = assignmentRepository;
-        this.issueRepository = issueRepository;
         this.answerRepository = answerRepository;
         this.gateway = gateway;
         this.attemptService = attemptService;
@@ -81,15 +76,6 @@ class ExaminerWorkGuard {
         }
         if (request.expectedWorkVersion() != work.getWorkVersion()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.WORK_VERSION_MISMATCH);
-        }
-
-        List<GradingIssue> openIssues = issueRepository
-                .findByTenantIdAndAssignmentIdAndDeletedFalseOrderByReportedAtAsc(user.tenantId(), work.getId())
-                .stream()
-                .filter(i -> i.getStatus() == ExaminerGradingIssueStatus.OPEN)
-                .toList();
-        if (!openIssues.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, ExaminerScoringConstants.BLOCKING_ISSUES_OPEN);
         }
 
         List<AiEvaluation> eligibleAnswers = answerRepository

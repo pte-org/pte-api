@@ -46,7 +46,6 @@ public final class ExaminerScoringConstants {
     public static final String ATTEMPT_EXCLUDED_FROM_GRADING_COHORT = "Attempt is excluded from grading cohort";
     public static final String WORK_NOT_STARTED_FOR_FINALIZE = "Work must be started before finalization";
     public static final String WORK_ALREADY_FINALIZED = "Work is already finalized";
-    public static final String BLOCKING_ISSUES_OPEN = "Unresolved blocking issues exist";
     public static final String CARRIED_OVER_DRAFTS_BLOCKING_REASON = "CARRIED_OVER_DRAFTS_UNCONFIRMED";
     public static final String CARRIED_OVER_DRAFTS_UNCONFIRMED =
             "Drafts handed over from the previous examiner must be saved again before finalizing";
