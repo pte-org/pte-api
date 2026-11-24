@@ -253,6 +253,11 @@ public class TenancyService {
         return organizationRepository.findOrganizationTypeByPublicId(tenantId);
     }
 
+    /** Returns the tenant's display name without exposing tenancy repositories. */
+    public Optional<String> findOrganizationName(UUID tenantId) {
+        return organizationRepository.findOrganizationNameByPublicId(tenantId);
+    }
+
     /**
      * Resolves the caller's own organization. Since an organization is the tenant, the id must equal the tenant id;
      * anything else is reported as not found so ids from another tenant never leak.

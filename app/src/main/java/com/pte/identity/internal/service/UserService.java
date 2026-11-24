@@ -128,7 +128,9 @@ public class UserService {
                 .orElseThrow(UserNotFoundException::new);
         String organizationType = user.getOrganizationId() == null ? null
                 : tenancyService.findOrganizationType(user.getOrganizationId()).orElse(null);
-        return UserMapper.toResponse(user, organizationType);
+        String organizationName = user.getOrganizationId() == null ? null
+                : tenancyService.findOrganizationName(user.getOrganizationId()).orElse(null);
+        return UserMapper.toResponse(user, organizationType, organizationName);
     }
 
     @Transactional(readOnly = true)
