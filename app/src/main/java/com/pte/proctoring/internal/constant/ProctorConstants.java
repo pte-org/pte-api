@@ -5,6 +5,9 @@ public final class ProctorConstants {
 
     public static final String COMMAND_TYPE_REQUIRED = "Command type is required";
     public static final String TARGET_ATTEMPT_INVALID = "TARGET_ATTEMPT_INVALID";
+    public static final String ABSENT_AFTER_ATTEMPT = "ABSENT_AFTER_ATTEMPT";
+    public static final String ABSENT_AFTER_ATTEMPT_MESSAGE =
+            "Student has already started or submitted the exam and cannot be marked absent.";
     public static final int SECURITY_AUDIT_DEFAULT_LIMIT = 50;
     public static final int SECURITY_AUDIT_MAX_LIMIT = 100;
     public static final String SECURITY_AUDIT_LIMIT_INVALID = "SECURITY_AUDIT_LIMIT_INVALID";

@@ -44,7 +44,8 @@ public class UserProfileService {
                 IdentityConstants.USER_PROFILE_UPDATED, IdentityConstants.USER_PROFILE_UPDATED_SUMMARY);
 
         String organizationType = tenancyService.findOrganizationType(caller.tenantId()).orElse(null);
-        return UserMapper.toResponse(user, organizationType);
+        String organizationName = tenancyService.findOrganizationName(caller.tenantId()).orElse(null);
+        return UserMapper.toResponse(user, organizationType, organizationName);
     }
 
     private static String normalizeOptional(String value) {

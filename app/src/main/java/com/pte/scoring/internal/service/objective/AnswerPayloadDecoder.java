@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Turns {@code SubmittedAnswerView.payload} (opaque, per-task-type-encoded) into a
@@ -82,7 +81,7 @@ public class AnswerPayloadDecoder {
             return decodePositionalSelection(answer);
         }
         if (hasOptions(answer)) {
-            return decodeSelection(answer);
+            return decodeSelection(answer, isReorderParagraphs(route));
         }
         if (route != null
                 && (HIGHLIGHT_INCORRECT_WORDS_TASK_TYPES.contains(route)
@@ -119,19 +118,26 @@ public class AnswerPayloadDecoder {
         }
     }
 
-    private DecodedAnswerPayload decodeSelection(SubmittedAnswerView answer) {
+    private static boolean isReorderParagraphs(String route) {
+        return ScoringConstants.TASK_TYPE_RE_ORDER_PARAGRAPHS.equals(route)
+                || "RE_ORDER_PARAGRAPHS_V1".equals(route);
+    }
+
+    private DecodedAnswerPayload decodeSelection(SubmittedAnswerView answer, boolean reorder) {
         List<FrozenOption> allOptions = parseOptions(answer.optionsJson());
         if (allOptions.isEmpty()) {
             return unrecognized(answer, "optionsJson present but unparsable/empty");
         }
-        Set<Integer> selectedOrderIndexes = parsePositionalOrderIndexes(answer.payload()).stream()
+        List<Integer> submittedOrder = parsePositionalOrderIndexes(answer.payload()).stream()
                 .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+                .toList();
+        Set<Integer> selectedOrderIndexes = new java.util.HashSet<>(submittedOrder);
         List<AnswerOptionView> options = allOptions.stream()
                 .map(option -> new AnswerOptionView(option.orderIndex(), option.text(), option.correct(),
                         selectedOrderIndexes.contains(option.orderIndex())))
                 .toList();
-        return new DecodedAnswerPayload(AnswerPayloadKind.SELECTION, null, null, options, null, null, null);
+        return new DecodedAnswerPayload(AnswerPayloadKind.SELECTION, null, null, options, null, null, null,
+                null, reorder ? submittedOrder : null);
     }
 
     private DecodedAnswerPayload decodePositionalSelection(SubmittedAnswerView answer) {
@@ -144,7 +150,22 @@ public class AnswerPayloadDecoder {
             gapValues.add(part.isEmpty() ? null : part);
         }
         return new DecodedAnswerPayload(
-                AnswerPayloadKind.POSITIONAL_SELECTION, null, null, null, null, gapValues, null);
+                AnswerPayloadKind.POSITIONAL_SELECTION, null, null, null, null, gapValues, null,
+                parseCorrectGapValues(answer.correctAnswerText()), null);
+    }
+
+    /** The answer key of a type-in item is a JSON array of strings, one per gap; anything else is left out. */
+    private List<String> parseCorrectGapValues(String correctAnswerText) {
+        if (correctAnswerText == null || correctAnswerText.isBlank()) {
+            return null;
+        }
+        try {
+            List<String> values = jsonMapper.readValue(correctAnswerText, new TypeReference<List<String>>() {
+            });
+            return values == null || values.isEmpty() ? null : values;
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     private DecodedAnswerPayload decodeWordIndices(SubmittedAnswerView answer) {

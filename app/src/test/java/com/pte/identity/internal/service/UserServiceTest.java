@@ -146,10 +146,12 @@ class UserServiceTest {
         User user = accountOf(account(1L, userPublicId, null), tenantId, Role.HOST_ADMIN);
         when(userRepository.findByPublicId(userPublicId)).thenReturn(Optional.of(user));
         when(tenancyService.findOrganizationType(tenantId)).thenReturn(Optional.of("SCHOOL"));
+        when(tenancyService.findOrganizationName(tenantId)).thenReturn(Optional.of("Trường Hoa Sen"));
 
         UserResponse response = userService.me(new CurrentUser(userPublicId, tenantId, List.of("HOST_ADMIN")));
 
         assertThat(response.organizationType()).isEqualTo("SCHOOL");
+        assertThat(response.organizationName()).isEqualTo("Trường Hoa Sen");
         assertThat(response.tenantId()).isEqualTo(tenantId);
         assertThat(response.roles()).containsExactly("HOST_ADMIN");
     }
