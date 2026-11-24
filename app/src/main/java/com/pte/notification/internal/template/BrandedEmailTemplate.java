@@ -98,17 +98,48 @@ public final class BrandedEmailTemplate {
         return new RenderedEmail(subject, text.toString(), page("Your application was approved", rows, year));
     }
 
-    public static RenderedEmail applicationReceived(int responseHours, int year) {
-        String subject = BRAND + " - Application received";
+    /**
+     * Confirmation sent when an application is submitted: what we received, what happens next and where to write.
+     * {@code supportEmail} may be blank, in which case the contact line is left out.
+     */
+    public static RenderedEmail applicationReceived(String organizationName, String requestedCode, int responseHours,
+            String supportEmail, int year) {
+        String subject = "[" + BRAND + "] We've received your application - " + singleLine(organizationName);
+        boolean hasSupport = supportEmail != null && !supportEmail.isBlank();
         String rows = heading("Application received")
-                + paragraph(BODY, "Thanks for applying to " + BRAND + ". Our team will review it and reply within <strong>"
-                        + responseHours + " hours</strong>.");
+                + paragraph(BODY, "Dear " + escape(organizationName) + " team,")
+                + paragraph(BODY, "Thank you for choosing " + BRAND + ". We have received your onboarding request with"
+                        + " the details below.")
+                + fields(new String[][] {{"Organization", organizationName}, {"Requested tenant code", requestedCode}})
+                + paragraph(BODY, "<strong>What happens next</strong>")
+                + paragraph(BODY, "&bull; <strong>Review:</strong> our team is checking your details and will reply"
+                        + " within <strong>" + responseHours + " hours</strong>.<br>"
+                        + "&bull; <strong>Account setup:</strong> once approved, we will email you the Host Admin"
+                        + " sign-in details so you can set up your centre.")
+                + (hasSupport ? paragraph(MUTED, "Questions, or need to change your application? Write to "
+                        + "<a href=\"mailto:" + escape(supportEmail) + "\" style=\"color:" + BODY + ";\">"
+                        + escape(supportEmail) + "</a>.") : "")
+                + paragraph(MUTED, "Warm regards,<br>The " + BRAND + " team");
 
-        String text = BRAND + "\n\nApplication received\n"
-                + "Thanks for applying to " + BRAND + ". Our team will review it and reply within " + responseHours
-                + " hours.\n";
+        String text = BRAND + "\n\nApplication received\n\n"
+                + "Dear " + organizationName + " team,\n\n"
+                + "Thank you for choosing " + BRAND + ". We have received your onboarding request with the details"
+                + " below.\n\n"
+                + "Organization: " + organizationName + "\n"
+                + "Requested tenant code: " + requestedCode + "\n\n"
+                + "What happens next\n"
+                + "- Review: our team is checking your details and will reply within " + responseHours + " hours.\n"
+                + "- Account setup: once approved, we will email you the Host Admin sign-in details so you can set up"
+                + " your centre.\n"
+                + (hasSupport ? "\nQuestions, or need to change your application? Write to " + supportEmail + ".\n" : "")
+                + "\nWarm regards,\nThe " + BRAND + " team\n";
 
         return new RenderedEmail(subject, text, page("Application received", rows, year));
+    }
+
+    /** Header values must stay on one line, whatever the applicant typed. */
+    private static String singleLine(String value) {
+        return value == null ? "" : value.replaceAll("[\\r\\n]+", " ").trim();
     }
 
     public static RenderedEmail applicationRejected(String reason, int year) {

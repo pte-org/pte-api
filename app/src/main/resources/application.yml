@@ -152,6 +152,7 @@ spring:
 
 notification:
   mail-from: ${MAIL_FROM:no-reply@pteprep.local}
+  support-email: ${SUPPORT_EMAIL:support@pteprep.local}
   inbox:
     # Enable after additive migration and the notification rollout checks; email delivery is independent.
     enabled: ${NOTIFICATION_INBOX_ENABLED:false}

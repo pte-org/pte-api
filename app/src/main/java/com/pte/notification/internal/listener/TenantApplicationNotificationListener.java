@@ -5,6 +5,7 @@ import com.pte.billing.TenantApplicationApprovedEvent;
 import com.pte.billing.TenantApplicationRejectedEvent;
 import com.pte.billing.TenantApplicationSubmittedEvent;
 import com.pte.notification.domain.enums.NotificationType;
+import com.pte.notification.internal.config.NotificationProperties;
 import com.pte.notification.internal.service.NotificationDispatchService;
 import com.pte.notification.internal.template.BrandedEmailTemplate;
 import com.pte.notification.internal.template.RenderedEmail;
@@ -21,19 +22,22 @@ public class TenantApplicationNotificationListener {
 
     private final NotificationDispatchService dispatchService;
     private final BillingSettingsService billingSettingsService;
+    private final NotificationProperties properties;
     private final Clock clock;
 
     public TenantApplicationNotificationListener(NotificationDispatchService dispatchService,
-            BillingSettingsService billingSettingsService, Clock clock) {
+            BillingSettingsService billingSettingsService, NotificationProperties properties, Clock clock) {
         this.dispatchService = dispatchService;
         this.billingSettingsService = billingSettingsService;
+        this.properties = properties;
         this.clock = clock;
     }
 
     @TransactionalEventListener
     public void onApplicationSubmitted(TenantApplicationSubmittedEvent event) {
-        RenderedEmail email = BrandedEmailTemplate.applicationReceived(
-                billingSettingsService.getTenantApplicationResponseSlaHours(), currentYear());
+        RenderedEmail email = BrandedEmailTemplate.applicationReceived(event.organizationName(), event.requestedCode(),
+                billingSettingsService.getTenantApplicationResponseSlaHours(), properties.getSupportEmail(),
+                currentYear());
 
         dispatchService.dispatchExternal(NotificationType.TENANT_APPLICATION_SUBMITTED, event.contactEmail(), null,
                 dedupeKey(event.applicationPublicId(), "submitted"), email.subject(), email.text(), email.html());

@@ -12,6 +12,18 @@ public class NotificationProperties {
     @NotBlank
     private String mailFrom = "no-reply@pteprep.local";
 
+    /** Address applicants are told to write to; shown in customer-facing emails. */
+    @NotBlank
+    private String supportEmail = "support@pteprep.local";
+
+    public String getSupportEmail() {
+        return supportEmail;
+    }
+
+    public void setSupportEmail(String supportEmail) {
+        this.supportEmail = supportEmail;
+    }
+
     public String getMailFrom() {
         return mailFrom;
     }
