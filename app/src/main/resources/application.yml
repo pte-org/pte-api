@@ -17,6 +17,7 @@ app:
   web:
     tenant-url: ${APP_WEB_TENANT_URL:http://localhost:3000}
     admin-url: ${APP_WEB_ADMIN_URL:http://localhost:3001}
+    practice-url: ${APP_WEB_PRACTICE_URL:http://localhost:3014}
   password-reset:
     token-ttl-minutes: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:30}
     retention-days: ${PASSWORD_RESET_RETENTION_DAYS:7}
