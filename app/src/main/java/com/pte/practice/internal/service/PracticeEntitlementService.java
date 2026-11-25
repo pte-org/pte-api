@@ -76,34 +76,35 @@ public class PracticeEntitlementService implements PracticeEntitlementGate {
     public PracticeEntitlementResponse getEntitlement(CurrentUser caller, UUID requestedOrganizationId) {
         if (caller == null || caller.userId() == null || caller.tenantId() == null
                 || !caller.hasRole(Role.STUDENT.name())) {
-            return response(caller == null ? null : caller.userId(), UNKNOWN_STATUS, null,
+            return response(caller == null ? null : caller.userId(), UNKNOWN_STATUS, null, null,
                     PracticeEntitlementState.UNAVAILABLE);
         }
         UUID tenantId = caller.tenantId();
         Optional<User> student = identityService.findActiveStudentInTenant(caller.userId(), tenantId);
         if (student.isEmpty()) {
-            return response(caller.userId(), UNKNOWN_STATUS, null, PracticeEntitlementState.UNAVAILABLE);
+            return response(caller.userId(), UNKNOWN_STATUS, null, null, PracticeEntitlementState.UNAVAILABLE);
         }
         String studentStatus = student.get().getStatus().name();
+        Account account = new Account(student.get().getFullName(), student.get().getEmail());
         if (!tenancyService.findActiveTenantIds(List.of(tenantId)).contains(tenantId)) {
-            return response(caller.userId(), studentStatus, null, PracticeEntitlementState.UNAVAILABLE);
+            return response(caller.userId(), studentStatus, account, null, PracticeEntitlementState.UNAVAILABLE);
         }
         TenantOrganizationSummary summary = tenancyService.findTenantOrganizationSummaries(List.of(tenantId))
                 .get(tenantId);
         if (summary == null || summary.deleted()) {
-            return response(caller.userId(), studentStatus, null, PracticeEntitlementState.UNAVAILABLE);
+            return response(caller.userId(), studentStatus, account, null, PracticeEntitlementState.UNAVAILABLE);
         }
         PracticeEntitlementResponse.OrganizationContext organization =
                 new PracticeEntitlementResponse.OrganizationContext(
                         tenantId, summary.name(), summary.organizationType());
         // A student account belongs to exactly one organization; asking for another one never unlocks it.
         if (requestedOrganizationId != null && !requestedOrganizationId.equals(tenantId)) {
-            return response(caller.userId(), studentStatus, organization, PracticeEntitlementState.LOCKED);
+            return response(caller.userId(), studentStatus, account, organization, PracticeEntitlementState.LOCKED);
         }
         PracticeEntitlementState state = isEligible(tenantId)
                 ? PracticeEntitlementState.UNLOCKED
                 : PracticeEntitlementState.LOCKED;
-        return response(caller.userId(), studentStatus, organization, state);
+        return response(caller.userId(), studentStatus, account, organization, state);
     }
 
     /** Reusable server check for session/task/media/answer mutations. */
@@ -126,11 +127,16 @@ public class PracticeEntitlementService implements PracticeEntitlementGate {
         return quota.current() <= quota.limit() && billingService.hasActiveExamPackageSubscription(tenantId);
     }
 
-    private PracticeEntitlementResponse response(UUID userPublicId, String status,
+    /** Who the account belongs to, carried together so the response builder keeps a short argument list. */
+    private record Account(String fullName, String email) {
+    }
+
+    private PracticeEntitlementResponse response(UUID userPublicId, String status, Account account,
             PracticeEntitlementResponse.OrganizationContext organization, PracticeEntitlementState state) {
         observability.entitlementEvaluated(state);
         return new PracticeEntitlementResponse(
-                new PracticeEntitlementResponse.Student(userPublicId, status),
+                new PracticeEntitlementResponse.Student(userPublicId, status,
+                        account == null ? null : account.fullName(), account == null ? null : account.email()),
                 organization,
                 organization == null ? List.of() : List.of(organization),
                 new PracticeEntitlementResponse.PracticeStatus(state),

@@ -53,6 +53,7 @@ public class PasswordResetService {
     private final Clock clock;
     private final String tenantUrl;
     private final String adminUrl;
+    private final String practiceUrl;
     private final Duration tokenTtl;
     private final SecureRandom random = new SecureRandom();
 
@@ -72,6 +73,7 @@ public class PasswordResetService {
         this.clock = clock;
         this.tenantUrl = stripTrailingSlash(webProperties.getTenantUrl());
         this.adminUrl = stripTrailingSlash(webProperties.getAdminUrl());
+        this.practiceUrl = stripTrailingSlash(webProperties.getPracticeUrl());
         this.tokenTtl = Duration.ofMinutes(properties.getTokenTtlMinutes());
     }
 
@@ -150,14 +152,22 @@ public class PasswordResetService {
         token.setExpiresAt(now.plus(tokenTtl));
         tokenRepository.save(token);
 
-        String base = roles.stream().map(Role::name).anyMatch(SecurityRoles::isPlatformRole) ? adminUrl : tenantUrl;
-        return new PasswordResetEmailRequestedEvent.Link(user.getUsername(), base + IdentityConstants.PASSWORD_RESET_PATH + raw);
+        return new PasswordResetEmailRequestedEvent.Link(user.getUsername(),
+                baseUrlOf(roles) + IdentityConstants.PASSWORD_RESET_PATH + raw);
     }
 
-    /** An account may reset by e-mail when it can sign in, holds a role, and holds no Student role anywhere. */
+    /** The app that account signs in to: a link to any other one would only strand them on a login they cannot pass. */
+    private String baseUrlOf(Set<Role> roles) {
+        if (roles.stream().map(Role::name).anyMatch(SecurityRoles::isPlatformRole)) {
+            return adminUrl;
+        }
+        // Someone holding a staff role as well works in the organization portal; a plain student only has practice.
+        return roles.equals(Set.of(Role.STUDENT)) ? practiceUrl : tenantUrl;
+    }
+
+    /** An account may reset by e-mail when it can sign in and holds a role. */
     private boolean isEligible(User user, Set<Role> roles) {
-        return !user.isSuspended() && user.getCredentialHash() != null && !roles.isEmpty()
-                && !roles.contains(Role.STUDENT);
+        return !user.isSuspended() && user.getCredentialHash() != null && !roles.isEmpty();
     }
 
     private Set<Role> rolesOf(User user) {

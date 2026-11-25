@@ -58,6 +58,7 @@ class PasswordResetServiceTest {
     private static final Instant NOW = Instant.parse("2026-10-31T00:00:00Z");
     private static final String TENANT_URL = "https://host.example";
     private static final String ADMIN_URL = "https://admin.example";
+    private static final String PRACTICE_URL = "https://practice.example";
     private static final String CLIENT_IP = "203.0.113.9";
 
     @Mock
@@ -132,19 +133,18 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    void request_studentAccount_isIgnored() {
+    void request_studentAccount_linksToThePracticeApp() {
         User student = account(3L, "student@x.vn");
         withRole(student, Role.STUDENT);
         when(userRepository.findByUsernameAndDeletedFalse("student@x.vn")).thenReturn(Optional.of(student));
 
         service.request("student@x.vn", "student@x.vn", CLIENT_IP);
 
-        verify(tokenRepository, never()).save(any());
-        verify(eventPublisher, never()).publishEvent(any());
+        assertThat(capturedEvent().links().get(0).url()).startsWith(PRACTICE_URL + "/reset-password?token=");
     }
 
     @Test
-    void request_accountHoldingAStudentRoleAlongsideAnotherRole_isIgnored() {
+    void request_accountHoldingAStudentRoleAlongsideAnotherRole_linksToTheOrganizationPortal() {
         User both = account(4L, "both@x.vn");
         withRole(both, Role.PROCTOR);
         both.getRoles().add(Role.STUDENT);
@@ -152,11 +152,11 @@ class PasswordResetServiceTest {
 
         service.request("both@x.vn", "both@x.vn", CLIENT_IP);
 
-        verify(eventPublisher, never()).publishEvent(any());
+        assertThat(capturedEvent().links().get(0).url()).startsWith(TENANT_URL + "/reset-password?token=");
     }
 
     @Test
-    void request_freePracticeStudentWithoutOrganization_isIgnored() {
+    void request_freePracticeStudentWithoutOrganization_linksToThePracticeApp() {
         User free = account(9L, "free@x.vn");
         free.setOrganizationId(null);
         free.setRoles(new HashSet<>(Set.of(Role.STUDENT)));
@@ -164,8 +164,7 @@ class PasswordResetServiceTest {
 
         service.request("free@x.vn", "free@x.vn", CLIENT_IP);
 
-        verify(tokenRepository, never()).save(any());
-        verify(eventPublisher, never()).publishEvent(any());
+        assertThat(capturedEvent().links().get(0).url()).startsWith(PRACTICE_URL + "/reset-password?token=");
     }
 
     @Test
@@ -314,18 +313,13 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    void request_usernameOfAStudentOrSuspendedAccount_doesNothing() {
-        User student = account(3L, "demo.student");
-        student.setEmail("s@x.vn");
-        withRole(student, Role.STUDENT);
+    void request_usernameOfASuspendedAccount_doesNothing() {
         User suspended = account(5L, "demo.gone");
         suspended.setEmail("s@x.vn");
         suspended.setStatus(UserStatus.SUSPENDED);
         withRole(suspended, Role.EXAMINER);
-        when(userRepository.findByUsernameAndDeletedFalse("demo.student")).thenReturn(Optional.of(student));
         when(userRepository.findByUsernameAndDeletedFalse("demo.gone")).thenReturn(Optional.of(suspended));
 
-        service.request("s@x.vn", "demo.student", CLIENT_IP);
         service.request("s@x.vn", "demo.gone", CLIENT_IP);
 
         verify(tokenRepository, never()).save(any());
@@ -473,6 +467,7 @@ class PasswordResetServiceTest {
         WebAppProperties properties = new WebAppProperties();
         properties.setTenantUrl(TENANT_URL);
         properties.setAdminUrl(ADMIN_URL);
+        properties.setPracticeUrl(PRACTICE_URL);
         return properties;
     }
 

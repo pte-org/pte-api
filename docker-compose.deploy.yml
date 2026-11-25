@@ -60,6 +60,7 @@ services:
       # Base URLs of the web portals, used to build the links in password-reset e-mails.
       APP_WEB_TENANT_URL: https://${TENANT_DOMAIN:?set TENANT_DOMAIN in the env file}
       APP_WEB_ADMIN_URL: https://${ADMIN_DOMAIN:?set ADMIN_DOMAIN in the env file}
+      APP_WEB_PRACTICE_URL: https://${PRACTICE_DOMAIN:-pte-practice.duckdns.org}
 
   postgres:
     mem_limit: 1g

@@ -10,6 +10,7 @@ public final class PracticeConstants {
     public static final String PRACTICE_PROGRESS_PATH = "/api/v1/student/practice/progress";
     public static final String PRACTICE_SESSION_PATH = "/api/v1/student/practice/sessions";
     public static final String PRACTICE_PROFILE_PATH = "/api/v1/student/practice/profile";
+    public static final String PRACTICE_PROFILE_AVATAR_SEGMENT = "/avatar";
     public static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
     public static final String PRACTICE_WEB_ENABLED_PROPERTY = "practice.web.enabled";
     public static final String PRACTICE_STRICT_ENTITLEMENT_ENABLED_PROPERTY =
