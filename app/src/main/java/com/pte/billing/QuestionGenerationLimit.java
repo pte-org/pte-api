@@ -7,7 +7,11 @@ package com.pte.billing;
  */
 public enum QuestionGenerationLimit {
 
-    ITEMS_PER_JOB("question_generation_max_items_per_job", 10, 1, 50, "questions",
+    /**
+     * The internal chunk a batch is cut into, not a business limit: kept off the settings page. Its maximum is the
+     * V34 CHECK on {@code requested_count} (1..10), so no stored value can ask for a job the database refuses.
+     */
+    ITEMS_PER_JOB("question_generation_max_items_per_job", 10, 1, 10, "questions",
             "Questions one generation job may ask for"),
     ITEMS_PER_BATCH("question_generation_max_items_per_batch", 50, 0, 500, "questions",
             "Questions one generation batch may ask for"),
