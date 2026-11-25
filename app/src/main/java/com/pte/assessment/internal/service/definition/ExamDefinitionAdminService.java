@@ -18,6 +18,7 @@ import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.assessment.internal.exception.ExamDefinitionNotFoundException;
 import com.pte.assessment.internal.mapper.ExamDefinitionMapper;
 import com.pte.assessment.internal.repository.ExamDefinitionRepository;
+import com.pte.shared.audit.AuditLogChangeWriter;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,7 +60,7 @@ public class ExamDefinitionAdminService {
             TaskTypeObservability observability, ItembankService itembankService,
             Clock clock) {
         this(repository, questionTypeService, runtimeProfileService, auditLogService, runtimeContractService,
-                observability, itembankService, clock, null, null);
+                observability, itembankService, clock, null, null, null);
     }
 
     @Autowired
@@ -67,7 +68,8 @@ public class ExamDefinitionAdminService {
             TaskRuntimeProfileService runtimeProfileService, AuditLogService auditLogService,
             TaskRuntimeContractService runtimeContractService,
             TaskTypeObservability observability, ItembankService itembankService,
-            Clock clock, TaskTypeStimulusService stimulusService, ActiveRubricVersionPin activeRubricVersionPin) {
+            Clock clock, TaskTypeStimulusService stimulusService, ActiveRubricVersionPin activeRubricVersionPin,
+            AuditLogChangeWriter auditLogChangeWriter) {
         this.repository = repository;
         this.questionTypeService = questionTypeService;
         this.runtimeProfileService = runtimeProfileService;
@@ -79,7 +81,7 @@ public class ExamDefinitionAdminService {
         this.validator = new ExamDefinitionValidator(questionTypeService, runtimeProfileService, itembankService);
         this.itemMapper = new ExamDefinitionItemMapper(validator);
         this.commandService = new ExamDefinitionCommandService(repository, validator, itemMapper, auditLogService,
-                observability, new RubricVersionPinning(activeRubricVersionPin));
+                observability, new RubricVersionPinning(activeRubricVersionPin), auditLogChangeWriter);
         this.approvalWorkflow = new ExamDefinitionApprovalWorkflow(repository, validator, auditLogService,
                 observability, questionTypeService, clock, stimulusService);
     }

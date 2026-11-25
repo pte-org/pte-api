@@ -14,7 +14,9 @@ import com.pte.assessment.internal.mapper.ExamDefinitionMapper;
 import com.pte.assessment.internal.repository.ExamDefinitionRepository;
 import com.pte.assessment.internal.service.assembly.CefrTargetRules;
 import com.pte.assessment.internal.service.timing.ExamTimeFrameRules;
+import com.pte.shared.audit.AuditLogChangeWriter;
 import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.audit.AuditStateChange;
 import com.pte.shared.constant.SharedConstants;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.SecurityPolicy;
@@ -32,10 +34,13 @@ class ExamDefinitionCommandService {
     private final AuditLogService auditLogService;
     private final TaskTypeObservability observability;
     private final RubricVersionPinning rubricPinning;
+    private final AuditLogChangeWriter changeWriter;
 
     ExamDefinitionCommandService(ExamDefinitionRepository repository, ExamDefinitionValidator validator,
             ExamDefinitionItemMapper itemMapper, AuditLogService auditLogService,
-            TaskTypeObservability observability, RubricVersionPinning rubricPinning) {
+            TaskTypeObservability observability, RubricVersionPinning rubricPinning,
+            AuditLogChangeWriter changeWriter) {
+        this.changeWriter = changeWriter;
         this.observability = observability;
         this.rubricPinning = rubricPinning;
         this.repository = repository;
@@ -63,8 +68,8 @@ class ExamDefinitionCommandService {
         draft.setRubricVersionPublicId(rubricPinning.active());
 
         ExamDefinition saved = saveOrTranslateConflict(draft);
-        audit(caller, ExamDefinitionConstants.AUDIT_CREATED, saved,
-                "Created draft version " + saved.getVersion());
+        auditState(caller, ExamDefinitionConstants.AUDIT_CREATED, saved,
+                "Created draft version " + saved.getVersion(), null);
         return ExamDefinitionMapper.toResponse(saved);
     }
 
@@ -90,8 +95,8 @@ class ExamDefinitionCommandService {
         draft.setRubricVersionPublicId(rubricPinning.active());
 
         ExamDefinition saved = saveOrTranslateConflict(draft);
-        audit(caller, ExamDefinitionConstants.AUDIT_CLONED, saved,
-                "Cloned from version " + source.getVersion());
+        auditState(caller, ExamDefinitionConstants.AUDIT_CLONED, saved,
+                "Cloned from version " + source.getVersion(), ExamDefinitionAuditState.of(source));
         return ExamDefinitionMapper.toResponse(saved);
     }
 
@@ -100,6 +105,7 @@ class ExamDefinitionCommandService {
             CurrentUser caller) {
         requireDraft(template);
         requireDraftModification(caller, template);
+        ExamDefinitionAuditState before = ExamDefinitionAuditState.of(template);
         try {
             template.setCefrTargets(new java.util.ArrayList<>(CefrTargetRules.fromRequest(request)));
         } catch (ExamDefinitionValidationException ex) {
@@ -107,8 +113,8 @@ class ExamDefinitionCommandService {
             throw ex;
         }
         ExamDefinition saved = repository.save(template);
-        audit(caller, ExamDefinitionConstants.AUDIT_CEFR_TARGETS_UPDATED, saved,
-                "Updated CEFR mix of draft version " + saved.getVersion());
+        auditState(caller, ExamDefinitionConstants.AUDIT_CEFR_TARGETS_UPDATED, saved,
+                "Updated CEFR mix of draft version " + saved.getVersion(), before);
         return ExamDefinitionMapper.toResponse(saved);
     }
 
@@ -117,6 +123,7 @@ class ExamDefinitionCommandService {
             CurrentUser caller) {
         requireDraft(template);
         requireDraftModification(caller, template);
+        ExamDefinitionAuditState before = ExamDefinitionAuditState.of(template);
         try {
             template.setTimeFrame(ExamTimeFrameRules.fromRequest(request));
         } catch (ExamDefinitionValidationException ex) {
@@ -124,8 +131,8 @@ class ExamDefinitionCommandService {
             throw ex;
         }
         ExamDefinition saved = repository.save(template);
-        audit(caller, ExamDefinitionConstants.AUDIT_TIME_FRAME_UPDATED, saved,
-                "Updated time frame of draft version " + saved.getVersion());
+        auditState(caller, ExamDefinitionConstants.AUDIT_TIME_FRAME_UPDATED, saved,
+                "Updated time frame of draft version " + saved.getVersion(), before);
         return ExamDefinitionMapper.toResponse(saved);
     }
 
@@ -134,6 +141,7 @@ class ExamDefinitionCommandService {
             CurrentUser caller) {
         requireDraft(template);
         requireDraftModification(caller, template);
+        ExamDefinitionAuditState before = ExamDefinitionAuditState.of(template);
         try {
             template.setName(request.name());
             if (request.templatePolicy() != null) {
@@ -146,8 +154,8 @@ class ExamDefinitionCommandService {
             }
             validator.validateCatalog(template, false);
             ExamDefinition saved = repository.save(template);
-            audit(caller, ExamDefinitionConstants.AUDIT_UPDATED, saved,
-                    "Updated draft version " + saved.getVersion());
+            auditState(caller, ExamDefinitionConstants.AUDIT_UPDATED, saved,
+                    "Updated draft version " + saved.getVersion(), before);
             return ExamDefinitionMapper.toResponse(saved);
         } catch (ExamDefinitionValidationException ex) {
             auditValidationFailure(caller, template, ex);
@@ -159,7 +167,13 @@ class ExamDefinitionCommandService {
     void deleteDraft(ExamDefinition template, CurrentUser caller) {
         requireDraft(template);
         requireDraftModification(caller, template);
-        audit(caller, ExamDefinitionConstants.AUDIT_DELETED, template, "Deleted draft version " + template.getVersion());
+        String deletedSummary = "Deleted draft version " + template.getVersion();
+        if (changeWriter != null && caller != null) {
+            changeWriter.recordState(caller, stateChange(ExamDefinitionConstants.AUDIT_DELETED, template,
+                    deletedSummary, ExamDefinitionAuditState.of(template), null));
+        } else {
+            audit(caller, ExamDefinitionConstants.AUDIT_DELETED, template, deletedSummary);
+        }
         repository.delete(template);
     }
 
@@ -200,6 +214,24 @@ class ExamDefinitionCommandService {
         }
         auditLogService.record(caller, ExamDefinitionConstants.AUDIT_AGGREGATE_TYPE,
                 String.valueOf(template.getPublicId()), action, truncate(summary));
+    }
+
+    /** Writes the command with before/after snapshots; falls back to a summary row when no writer is wired. */
+    private void auditState(CurrentUser caller, String action, ExamDefinition template, String summary,
+            ExamDefinitionAuditState before) {
+        if (changeWriter == null || caller == null || template == null) {
+            audit(caller, action, template, summary);
+            return;
+        }
+        changeWriter.recordState(caller, stateChange(action, template, summary, before,
+                ExamDefinitionAuditState.of(template)));
+    }
+
+    private AuditStateChange stateChange(String action, ExamDefinition template, String summary,
+            ExamDefinitionAuditState before, ExamDefinitionAuditState after) {
+        return new AuditStateChange(ExamDefinitionConstants.AUDIT_AGGREGATE_TYPE,
+                String.valueOf(template.getPublicId()), template.getName(), template.getCode(), action,
+                truncate(summary), before, after);
     }
 
     private void auditValidationFailure(CurrentUser caller, ExamDefinition template,
