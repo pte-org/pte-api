@@ -41,14 +41,12 @@ public final class AttendanceConstants {
     public static final String LABEL_IDENTITY_WINDOW = "Identity verification";
 
     public static final String MSG_CANCELLED = "Cannot record %s for a cancelled session";
-    public static final String MSG_HOST_STATUS = "Host %s is only permitted for SCHEDULED, OPEN, or CLOSED sessions";
+    public static final String MSG_HOST_STATUS = "Host %s is only permitted for SCHEDULED or OPEN sessions";
     public static final String MSG_PROCTOR_STATUS = "Proctor %s is only allowed for SCHEDULED or OPEN sessions";
     public static final String MSG_TIMING_MISSING = "Session timing is missing";
     public static final String MSG_BEFORE_WINDOW = "%s is not permitted before 30 minutes prior to session opening";
     public static final String MSG_AFTER_CLOSE = "%s is closed after session closing time";
     public static final String MSG_HOST_REASON_ATTENDANCE = "Reason is mandatory for Host attendance actions";
-    public static final String MSG_HOST_REASON_IDENTITY =
-            "Reason is mandatory for Host identity verification on closed session";
     public static final String MSG_PROCTOR_REASON_CHANGE =
             "Reason is required when changing marked attendance status or resetting to UNMARKED";
     public static final String MSG_GENERATION_MISMATCH =

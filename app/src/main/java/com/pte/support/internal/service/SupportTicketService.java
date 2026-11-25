@@ -79,7 +79,7 @@ public class SupportTicketService {
         auditLogService.record(caller, SupportConstants.AGGREGATE_SUPPORT_TICKET,
                 saved.getPublicId().toString(), SupportConstants.EVENT_TICKET_SUBMITTED,
                 "Submitted ticket [" + saved.getCategory() + "]");
-        return SupportTicketMapper.toResponse(saved, List.of());
+        return detailResponse(saved, List.of(), caller);
     }
 
     @Transactional(readOnly = true)
@@ -111,7 +111,7 @@ public class SupportTicketService {
         SupportTicket ticket = ticketRepository.findByPublicIdAndTenantId(publicId, caller.tenantId())
                 .orElseThrow(SupportTicketNotFoundException::new);
         List<SupportTicketNote> notes = noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId());
-        return SupportTicketMapper.toResponse(ticket, notes);
+        return detailResponse(ticket, notes, caller);
     }
 
     @Transactional
@@ -123,7 +123,7 @@ public class SupportTicketService {
                 ticket.getPublicId().toString(), SupportConstants.EVENT_TICKET_CLOSED,
                 "Host closed ticket");
         List<SupportTicketNote> notes = noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId());
-        return SupportTicketMapper.toResponse(ticket, notes);
+        return detailResponse(ticket, notes, caller);
     }
 
     @Transactional
@@ -145,7 +145,7 @@ public class SupportTicketService {
                 ticket.getPublicId().toString(), SupportConstants.EVENT_TICKET_STATUS_UPDATED,
                 "Status updated to " + request.status());
         List<SupportTicketNote> notes = noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId());
-        return SupportTicketMapper.toResponse(ticket, notes);
+        return detailResponse(ticket, notes, caller);
     }
 
     @Transactional
@@ -165,7 +165,7 @@ public class SupportTicketService {
                 ticket.getPublicId().toString(), SupportConstants.EVENT_TICKET_NOTE_ADDED,
                 "Admin added note");
         List<SupportTicketNote> notes = noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId());
-        return SupportTicketMapper.toResponse(ticket, notes);
+        return detailResponse(ticket, notes, caller);
     }
 
     @Transactional(readOnly = true)
@@ -210,7 +210,13 @@ public class SupportTicketService {
         SupportTicket ticket = ticketRepository.findByPublicId(publicId)
                 .orElseThrow(SupportTicketNotFoundException::new);
         List<SupportTicketNote> notes = noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId());
-        return SupportTicketMapper.toResponse(ticket, notes);
+        return detailResponse(ticket, notes, caller);
+    }
+
+    private SupportTicketResponse detailResponse(SupportTicket ticket, List<SupportTicketNote> notes,
+            CurrentUser caller) {
+        return SupportTicketMapper.toResponse(ticket, notes,
+                entityReferenceValidator.describe(ticket.getEntityType(), ticket.getEntityId(), caller));
     }
 
     private static Specification<SupportTicket> byTenant(UUID tenantId) {
