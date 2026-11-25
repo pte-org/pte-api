@@ -5,7 +5,7 @@ import java.util.Set;
 /** Codes, messages, audit actions, result strings and limits of batch question generation. */
 public final class BatchGenerationConstants {
 
-    public static final int DEFAULT_MAX_ITEMS_PER_BATCH = 50;
+    public static final int DEFAULT_MAX_ITEMS_PER_BATCH = 0;
     /** Mirrors the {@code total_requested} CHECK of V53 and the platform setting maximum. */
     public static final int MAX_ITEMS_PER_BATCH_HARD_LIMIT = 500;
     /** One row per task type and CEFR level: room for every type at all six levels; the item cap bounds the cost. */
