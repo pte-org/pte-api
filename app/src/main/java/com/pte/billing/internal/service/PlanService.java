@@ -13,7 +13,9 @@ import com.pte.billing.internal.exception.plan.PlanNotFoundException;
 import com.pte.billing.internal.exception.plan.PlanStateException;
 import com.pte.billing.internal.exception.plan.PlanValidationException;
 import com.pte.billing.internal.repository.ServicePlanRepository;
+import com.pte.shared.audit.AuditLogChangeWriter;
 import com.pte.shared.audit.AuditLogService;
+import com.pte.shared.audit.AuditStateChange;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.PlatformOperation;
 import com.pte.shared.security.PlatformOperationPolicy;
@@ -33,12 +35,19 @@ public class PlanService {
 
     private final ServicePlanRepository planRepository;
     private final AuditLogService auditLogService;
+    private final AuditLogChangeWriter changeWriter;
     private final PlanVersionedStore store;
 
-    @Autowired
     public PlanService(ServicePlanRepository planRepository, AuditLogService auditLogService, Clock clock) {
+        this(planRepository, auditLogService, null, clock);
+    }
+
+    @Autowired
+    public PlanService(ServicePlanRepository planRepository, AuditLogService auditLogService,
+            AuditLogChangeWriter changeWriter, Clock clock) {
         this.planRepository = planRepository;
         this.auditLogService = auditLogService;
+        this.changeWriter = changeWriter;
         this.store = new PlanVersionedStore(planRepository, clock);
     }
 
@@ -61,7 +70,7 @@ public class PlanService {
         PlanDefinitionRules.apply(plan, request.name(), request.description(), request.price(), request.currency(),
                 type, request.durationDays(), request.maxStudentsPerSession(), request.extraStudentSlots());
         PlanResponse result = store.response(store.persist(plan));
-        audit(caller, BillingConstants.AUDIT_PLAN_TRANSITION, plan.getPublicId(), BillingConstants.PLAN_CREATED_SUMMARY);
+        audit(caller, BillingConstants.AUDIT_PLAN_TRANSITION, plan, BillingConstants.PLAN_CREATED_SUMMARY, null);
         return result;
     }
 
@@ -112,6 +121,7 @@ public class PlanService {
         if (plan.getStatus() == PlanStatus.ARCHIVED) {
             throw new PlanStateException(BillingConstants.PLAN_ARCHIVED_NOT_EDITABLE);
         }
+        PlanAuditState before = PlanAuditState.of(plan);
 
         PlanType type = PlanDefinitionRules.parseType(request.type());
         if (plan.getStatus() == PlanStatus.ACTIVE && type != plan.getType()) {
@@ -129,7 +139,7 @@ public class PlanService {
         PlanDefinitionRules.apply(plan, request.name(), request.description(), request.price(), request.currency(),
                 type, request.durationDays(), request.maxStudentsPerSession(), request.extraStudentSlots());
         PlanResponse result = store.response(store.persist(plan));
-        audit(caller, BillingConstants.AUDIT_PLAN_TRANSITION, publicId, BillingConstants.PLAN_UPDATED_SUMMARY);
+        audit(caller, BillingConstants.AUDIT_PLAN_TRANSITION, plan, BillingConstants.PLAN_UPDATED_SUMMARY, before);
         return result;
     }
 
@@ -151,9 +161,11 @@ public class PlanService {
         }
         PlanDefinitionRules.validate(plan.getName(), plan.getDescription(), plan.getPrice(), plan.getCurrency(),
                 plan.getType(), plan.getDurationDays(), plan.getMaxStudentsPerSession(), plan.getExtraStudentSlots());
+        PlanAuditState beforeActivation = PlanAuditState.of(plan);
         plan.activate();
         PlanResponse result = store.response(store.persist(plan));
-        audit(caller, BillingConstants.AUDIT_PLAN_TRANSITION, publicId, BillingConstants.PLAN_ACTIVATED_SUMMARY);
+        audit(caller, BillingConstants.AUDIT_PLAN_TRANSITION, plan, BillingConstants.PLAN_ACTIVATED_SUMMARY,
+                beforeActivation);
         return result;
     }
 
@@ -178,9 +190,11 @@ public class PlanService {
                     BillingConstants.PLAN_MUST_BE_ACTIVE_TO_ARCHIVE_MESSAGE);
         }
         store.requireNoOutstandingCodes(plan);
+        PlanAuditState beforeArchive = PlanAuditState.of(plan);
         plan.archive();
         PlanResponse result = store.response(store.persist(plan));
-        audit(caller, BillingConstants.AUDIT_PLAN_TRANSITION, publicId, BillingConstants.PLAN_ARCHIVED_SUMMARY);
+        audit(caller, BillingConstants.AUDIT_PLAN_TRANSITION, plan, BillingConstants.PLAN_ARCHIVED_SUMMARY,
+                beforeArchive);
         return result;
     }
 
@@ -200,8 +214,10 @@ public class PlanService {
             throw new PlanLifecycleException(BillingConstants.PLAN_HAS_REFERENCES,
                     BillingConstants.PLAN_HAS_REFERENCES_MESSAGE);
         }
+        PlanAuditState beforeDeletion = PlanAuditState.of(plan);
         plan.setDeleted(true);
-        audit(caller, BillingConstants.PLAN_DRAFT_DELETED, publicId, BillingConstants.PLAN_DRAFT_DELETED_SUMMARY);
+        audit(caller, BillingConstants.PLAN_DRAFT_DELETED, plan, BillingConstants.PLAN_DRAFT_DELETED_SUMMARY,
+                beforeDeletion);
     }
 
     public static void validateExamBenefits(Integer durationDays, Integer maxStudentsPerSession, Integer extraStudentSlots) {
@@ -222,9 +238,18 @@ public class PlanService {
         throw new org.springframework.security.access.AccessDeniedException(SharedConstants.ACCESS_DENIED);
     }
 
-    private void audit(CurrentUser caller, String action, UUID publicId, String summary) {
-        if (auditLogService != null && caller != null && publicId != null) {
-            auditLogService.record(caller, BillingConstants.PLAN_AGGREGATE, publicId.toString(), action, summary);
+    /** Writes the plan command with before/after snapshots; summary only when no change writer is wired. */
+    private void audit(CurrentUser caller, String action, ServicePlan plan, String summary, PlanAuditState before) {
+        if (caller == null || plan.getPublicId() == null) {
+            return;
+        }
+        String aggregateId = plan.getPublicId().toString();
+        if (changeWriter != null) {
+            PlanAuditState after = plan.isDeleted() ? null : PlanAuditState.of(plan);
+            changeWriter.recordState(caller, new AuditStateChange(BillingConstants.PLAN_AGGREGATE, aggregateId,
+                    plan.getName(), null, action, summary, before, after));
+        } else if (auditLogService != null) {
+            auditLogService.record(caller, BillingConstants.PLAN_AGGREGATE, aggregateId, action, summary);
         }
     }
 }
