@@ -35,7 +35,7 @@ public final class ItembankFixtures {
                 new QuestionCreationService(questionRepository, validationHelper, accessPolicy, null, null,
                         mediaValidator),
                 new QuestionLifecycleService(questionRepository, validationHelper, accessPolicy, null,
-                        approvalService, mediaValidator),
+                        approvalService, mediaValidator, null),
                 new QuestionQueryService(questionRepository, poolService));
     }
 
@@ -46,8 +46,8 @@ public final class ItembankFixtures {
         return new QuestionTypeService(
                 new TaskTypeQueryService(repository, profileResolver, contractResolver, null),
                 new TaskTypeCapabilityService(repository, contractService),
-                new StandardTaskTypeService(repository, profileResolver, null),
-                new DynamicTaskTypeService(repository, contractResolver, null, null),
+                new StandardTaskTypeService(repository, profileResolver, null, null),
+                new DynamicTaskTypeService(repository, contractResolver, null, null, null),
                 new TaskTypeGovernanceService(repository, contractResolver, null),
                 new TaskTypeRuntimeLockingService(repository));
     }

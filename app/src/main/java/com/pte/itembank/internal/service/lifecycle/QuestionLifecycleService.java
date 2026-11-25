@@ -42,27 +42,22 @@ public class QuestionLifecycleService {
     private final QuestionApprovalService approvalService;
     private final QuestionMediaReferenceValidator mediaValidator;
     private final GenerationMetaHelper generationMetaHelper;
+    private final QuestionUpdateAudit updateAudit;
 
     @Autowired
     public QuestionLifecycleService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
                                    ItembankAccessPolicy accessPolicy, AuditLogService auditLogService,
                                    QuestionApprovalService approvalService,
-                                   QuestionMediaReferenceValidator mediaValidator) {
+                                   QuestionMediaReferenceValidator mediaValidator,
+                                   QuestionUpdateAudit updateAudit) {
         this.mediaValidator = mediaValidator;
+        this.updateAudit = updateAudit;
         this.questionRepository = questionRepository;
         this.validationHelper = validationHelper;
         this.accessPolicy = accessPolicy;
         this.auditLogService = auditLogService;
         this.approvalService = approvalService;
         this.generationMetaHelper = new GenerationMetaHelper(auditLogService);
-    }
-
-    public QuestionLifecycleService(QuestionRepository questionRepository, QuestionValidationHelper validationHelper,
-                                   ItembankAccessPolicy accessPolicy, AuditLogService auditLogService) {
-        this(questionRepository, validationHelper, accessPolicy, auditLogService,
-                new QuestionApprovalService(questionRepository, validationHelper, accessPolicy, auditLogService,
-                        new QuestionMediaReferenceValidator(null)),
-                new QuestionMediaReferenceValidator(null));
     }
 
     @Transactional
@@ -180,6 +175,7 @@ public class QuestionLifecycleService {
         if (request.version() != null && request.version() != question.getVersion()) {
             throw new QuestionVersionConflictException();
         }
+        QuestionAuditState before = QuestionAuditState.of(question);
         applyContent(question, request.promptText(), request.audioPromptRef(),
                 request.imagePromptRef(), request.referenceAnswerText(), request.correctAnswerText(),
                 request.minWordCount(), request.maxWordCount(), request.options());
@@ -211,7 +207,11 @@ public class QuestionLifecycleService {
             summary += String.format(ItembankConstants.AUDIT_SUMMARY_AVAILABILITY_CHANGED, wasForExam,
                     question.isAvailableForExam(), wasForPractice, question.isAvailableForPractice());
         }
-        audit(caller, ItembankConstants.AUDIT_UPDATED, question, summary);
+        if (updateAudit != null && caller != null) {
+            updateAudit.record(caller, question, before, summary);
+        } else {
+            audit(caller, ItembankConstants.AUDIT_UPDATED, question, summary);
+        }
         return toResponse(question);
     }
 
