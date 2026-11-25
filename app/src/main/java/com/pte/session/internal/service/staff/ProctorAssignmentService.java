@@ -6,7 +6,9 @@ import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ExamSessionProctor;
 import com.pte.session.internal.dto.request.AssignProctorRequest;
 import com.pte.session.internal.dto.response.proctor.ProctorAssignmentResponse;
+import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.internal.exception.staff.AlreadyAssignedException;
+import com.pte.session.internal.exception.staff.ProctorAssignmentLockedException;
 import com.pte.session.internal.exception.staff.ProctorAssignmentNotFoundException;
 import com.pte.session.internal.repository.ExamSessionProctorRepository;
 import com.pte.shared.security.CurrentUser;
@@ -44,6 +46,9 @@ public class ProctorAssignmentService {
             CurrentUser caller) {
         ExamSession session = sessionLifecycleService.findOwned(sessionPublicId, caller);
         tenancyService.assertTenantActive(session.getTenantId());
+        if (session.getStatus() == SessionStatus.OPEN || session.getStatus() == SessionStatus.CLOSED) {
+            throw new ProctorAssignmentLockedException();
+        }
         identityService.requireActiveProctorInTenant(request.proctorPublicId(), session.getTenantId());
         ExamSessionProctor assignment = newAssignment(session, request);
         try {
