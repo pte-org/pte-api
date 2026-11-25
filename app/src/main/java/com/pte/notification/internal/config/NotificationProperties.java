@@ -28,6 +28,10 @@ public class NotificationProperties {
     @NotBlank
     private String tenantWebUrl = "http://localhost:3000";
 
+    /** Base URL of the student practice web app; student welcome/credential emails link to its /sign-in page. */
+    @NotBlank
+    private String practiceWebUrl = "http://localhost:3014";
+
     public String getTenantWebUrl() {
         return tenantWebUrl;
     }
@@ -36,9 +40,22 @@ public class NotificationProperties {
         this.tenantWebUrl = tenantWebUrl;
     }
 
-    /** Sign-in page linked from the approval email. */
+    public String getPracticeWebUrl() {
+        return practiceWebUrl;
+    }
+
+    public void setPracticeWebUrl(String practiceWebUrl) {
+        this.practiceWebUrl = practiceWebUrl;
+    }
+
+    /** Sign-in page linked from the approval and staff credential emails. */
     public String getLoginUrl() {
         return stripTrailingSlash(tenantWebUrl) + "/login";
+    }
+
+    /** Sign-in page linked from student welcome and credential emails. */
+    public String getPracticeLoginUrl() {
+        return stripTrailingSlash(practiceWebUrl) + "/sign-in";
     }
 
     /** Registration page linked from the rejection email, so an applicant can submit again. */
