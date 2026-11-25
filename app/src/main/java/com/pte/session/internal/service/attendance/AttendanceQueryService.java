@@ -77,10 +77,11 @@ public class AttendanceQueryService {
             canEditSession = false;
             sessionBlockingReason = "SESSION_CANCELLED";
         } else if (isHost) {
-            if (session.getStatus() == SessionStatus.SCHEDULED
-                    || session.getStatus() == SessionStatus.OPEN
-                    || session.getStatus() == SessionStatus.CLOSED) {
+            if (session.getStatus() == SessionStatus.SCHEDULED || session.getStatus() == SessionStatus.OPEN) {
                 canEditSession = true;
+            } else if (session.getStatus() == SessionStatus.CLOSED) {
+                canEditSession = false;
+                sessionBlockingReason = "SESSION_CLOSED";
             } else {
                 canEditSession = false;
                 sessionBlockingReason = "SESSION_NOT_MODIFIABLE";

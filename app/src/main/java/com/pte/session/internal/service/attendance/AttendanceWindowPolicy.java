@@ -20,7 +20,7 @@ class AttendanceWindowPolicy {
                     AttendanceConstants.MSG_CANCELLED.formatted(kind.recordLabel()));
         }
         if (isHost) {
-            if (status != SessionStatus.SCHEDULED && status != SessionStatus.OPEN && status != SessionStatus.CLOSED) {
+            if (status != SessionStatus.SCHEDULED && status != SessionStatus.OPEN) {
                 throw new AttendanceWindowClosedException(
                         AttendanceConstants.MSG_HOST_STATUS.formatted(kind.hostLabel()));
             }
