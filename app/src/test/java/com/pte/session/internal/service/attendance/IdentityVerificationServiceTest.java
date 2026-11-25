@@ -8,7 +8,7 @@ import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.request.RecordIdentityVerificationRequest;
 import com.pte.session.dto.response.AttendanceRowView;
 import com.pte.session.internal.exception.attendance.AttendanceConflictException;
-import com.pte.session.internal.exception.attendance.AttendanceReasonRequiredException;
+import com.pte.session.internal.exception.attendance.AttendanceWindowClosedException;
 import com.pte.session.internal.repository.ExamRegistrationRepository;
 import com.pte.session.internal.repository.ExamSessionProctorRepository;
 import com.pte.session.internal.repository.ExamSessionRepository;
@@ -169,7 +169,7 @@ class IdentityVerificationServiceTest {
     }
 
     @Test
-    void hostOnAClosedSession_mustGiveAReason() {
+    void hostOnAClosedSession_isRejected() {
         session.setStatus(SessionStatus.CLOSED);
         CurrentUser host = new CurrentUser(UUID.randomUUID(), tenantId, List.of("HOST_ADMIN"));
         when(sessionRepository.findWithLockByPublicIdAndTenantId(sessionPublicId, tenantId))
@@ -178,7 +178,7 @@ class IdentityVerificationServiceTest {
                 any())).thenReturn(new IdempotencyDecision(IdempotencyOutcome.NEW, null));
 
         assertThatThrownBy(() -> service.recordIdentityVerification(sessionPublicId, studentPublicId,
-                request("VERIFIED", 0L, " "), host, true))
-                .isInstanceOf(AttendanceReasonRequiredException.class);
+                request("VERIFIED", 0L, "late fix"), host, true))
+                .isInstanceOf(AttendanceWindowClosedException.class);
     }
 }
