@@ -14,6 +14,7 @@ import com.pte.itembank.internal.repository.QuestionTypeRepository;
 import com.pte.itembank.internal.service.tasktype.RuntimeProfileResolver;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.itembank.TaskTypeKeyNormalizer;
+import com.pte.shared.audit.AuditLogChangeWriter;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.SecurityRoles;
@@ -33,11 +34,14 @@ public class StandardTaskTypeService {
     private final QuestionTypeRepository repository;
     private final RuntimeProfileResolver profileResolver;
     private final AuditLogService auditLogService;
+    private final AuditLogChangeWriter changeWriter;
 
     public StandardTaskTypeService(
             QuestionTypeRepository repository,
             RuntimeProfileResolver profileResolver,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            AuditLogChangeWriter changeWriter) {
+        this.changeWriter = changeWriter;
         this.repository = repository;
         this.profileResolver = profileResolver;
         this.auditLogService = auditLogService;
@@ -82,8 +86,8 @@ public class StandardTaskTypeService {
         applyCanonicalRequirements(definition, taskType);
 
         definition = repository.save(definition);
-        audit(caller, ItembankConstants.TASK_TYPE_CREATED, definition.getPublicId(),
-                "Created standard task type " + code);
+        TaskTypeAuditState.write(changeWriter, auditLogService, caller, ItembankConstants.TASK_TYPE_CREATED,
+                definition, "Created standard task type " + code, null, TaskTypeAuditState.of(definition));
         return QuestionTypeMapper.toResponse(definition, profileResolver.resolveProfile(definition.getCode()));
     }
 
@@ -98,6 +102,7 @@ public class StandardTaskTypeService {
                 && "ACTIVE".equals(definition.getLifecycleStatus())) {
             deny(caller, publicId, ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
         }
+        TaskTypeAuditState before = TaskTypeAuditState.of(definition);
         definition.setDisplayName(request.displayName().trim());
         definition.setShortName(request.shortName().trim());
         definition.setDisplayOrder(request.displayOrder());
@@ -108,8 +113,9 @@ public class StandardTaskTypeService {
         }
         applyCanonicalRequirements(definition, TaskTypeCodeCompatibility.parse(definition.getCode()));
         definition = repository.save(definition);
-        audit(caller, ItembankConstants.TASK_TYPE_UPDATED, publicId,
-                "Updated standard task type " + definition.getCode());
+        TaskTypeAuditState.write(changeWriter, auditLogService, caller, ItembankConstants.TASK_TYPE_UPDATED,
+                definition, "Updated standard task type " + definition.getCode(), before,
+                TaskTypeAuditState.of(definition));
         return QuestionTypeMapper.toResponse(definition, profileResolver.resolveProfile(definition.getCode()));
     }
 
@@ -120,11 +126,12 @@ public class StandardTaskTypeService {
     public void delete(UUID publicId, CurrentUser caller) {
         QuestionType definition = findByPublicIdOrThrow(publicId);
         requireGovernance(caller, definition.getAuthorUserPublicId());
+        TaskTypeAuditState before = TaskTypeAuditState.of(definition);
         definition.setActive(false);
         definition.setDeleted(true);
         repository.save(definition);
-        audit(caller, ItembankConstants.TASK_TYPE_RETIRED, publicId,
-                "Deleted standard task type " + definition.getCode());
+        TaskTypeAuditState.write(changeWriter, auditLogService, caller, ItembankConstants.TASK_TYPE_RETIRED,
+                definition, "Deleted standard task type " + definition.getCode(), before, null);
     }
 
     private void applyCanonicalRequirements(QuestionType definition, PteTaskType taskType) {
@@ -193,13 +200,5 @@ public class StandardTaskTypeService {
                     com.pte.shared.constant.SharedConstants.AUDIT_AUTHORIZATION_DENIED, message);
         }
         throw new org.springframework.security.access.AccessDeniedException(message);
-    }
-
-    private void audit(CurrentUser caller, String action, Object aggregateId, String summary) {
-        if (auditLogService == null || caller == null) {
-            return;
-        }
-        auditLogService.record(caller, ItembankConstants.TASK_TYPE_AUDIT_AGGREGATE,
-                String.valueOf(aggregateId), action, summary.length() <= 500 ? summary : summary.substring(0, 500));
     }
 }
