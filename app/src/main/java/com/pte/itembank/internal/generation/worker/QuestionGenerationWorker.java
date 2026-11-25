@@ -10,16 +10,22 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Polls for a job and runs it on a dedicated thread, so a job that takes minutes never blocks the shared
- * scheduler thread. At most one job runs per instance; another instance (or this one after a restart) can resume a
- * job once its lease expired.
+ * Polls for jobs and runs each on its own thread of the generation pool, so a job that takes minutes never blocks
+ * the shared scheduler thread. Every tick claims jobs until the pool is full or nothing is claimable; the claim
+ * itself enforces the parallel-run setting across instances. Another instance (or this one after a restart) can
+ * resume a job once its lease expired.
  */
 @Component
 @ConditionalOnProperty(prefix = "itembank.generation", name = "enabled", havingValue = "true")
@@ -28,7 +34,10 @@ public class QuestionGenerationWorker {
     private static final Logger LOG = LoggerFactory.getLogger(QuestionGenerationWorker.class);
 
     private final String workerId = QuestionGenerationConstants.WORKER_ID_PREFIX + UUID.randomUUID();
-    private final AtomicBoolean busy = new AtomicBoolean(false);
+    /** Jobs this instance runs right now; never more than the pool has threads. */
+    private final AtomicInteger running = new AtomicInteger();
+    /** The task of every job this instance runs, so a cancel request can interrupt it. */
+    private final Map<UUID, FutureTask<Void>> runningJobs = new ConcurrentHashMap<>();
     private final JobLeaseService leases;
     private final GenerationJobRunner runner;
     private final ThreadPoolTaskExecutor executor;
@@ -45,25 +54,42 @@ public class QuestionGenerationWorker {
 
     @Scheduled(fixedDelayString = "${itembank.generation.worker.poll-delay-ms:3000}")
     public void tick() {
-        if (!busy.compareAndSet(false, true)) {
-            return;
+        while (running.get() < executor.getMaxPoolSize()) {
+            Optional<JobClaim> claim;
+            try {
+                claim = leases.claimNext(workerId);
+            } catch (RuntimeException unavailable) {
+                LOG.warn("Generation claim deferred: errorType={}", unavailable.getClass().getSimpleName());
+                return;
+            }
+            if (claim.isEmpty()) {
+                return;
+            }
+            JobClaim claimed = claim.get();
+            // Registered before it starts, so a cancel arriving at once finds it and a fast job cannot end first.
+            FutureTask<Void> task = new FutureTask<>(() -> runClaim(claimed), null);
+            runningJobs.put(claimed.jobPublicId(), task);
+            running.incrementAndGet();
+            try {
+                executor.execute(task);
+            } catch (RejectedExecutionException rejected) {
+                // The claimed job keeps its lease until it expires and is then resumed, as after a crash.
+                runningJobs.remove(claimed.jobPublicId());
+                running.decrementAndGet();
+                return;
+            }
         }
-        Optional<JobClaim> claim;
-        try {
-            claim = leases.claimNext(workerId);
-        } catch (RuntimeException unavailable) {
-            busy.set(false);
-            LOG.warn("Generation claim deferred: errorType={}", unavailable.getClass().getSimpleName());
-            return;
-        }
-        if (claim.isEmpty()) {
-            busy.set(false);
-            return;
-        }
-        try {
-            executor.execute(() -> runClaim(claim.get()));
-        } catch (RejectedExecutionException rejected) {
-            busy.set(false);
+    }
+
+    /**
+     * Interrupts the job a person cancelled, after the CANCELLING status is committed: the provider call in progress
+     * fails at once and the runner closes the job as cancelled. A job not running here is left to its own instance.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onCancelRequested(GenerationCancelRequested request) {
+        FutureTask<Void> task = runningJobs.get(request.jobPublicId());
+        if (task != null) {
+            task.cancel(true);
         }
     }
 
@@ -77,7 +103,8 @@ public class QuestionGenerationWorker {
         } finally {
             // Also after an abort: the watchers reconnect and find the job resumed or ended.
             liveFeed.jobEnded(claim.jobPublicId());
-            busy.set(false);
+            runningJobs.remove(claim.jobPublicId());
+            running.decrementAndGet();
         }
     }
 }

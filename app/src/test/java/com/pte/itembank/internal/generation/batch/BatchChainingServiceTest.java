@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.generation.batch;
 
+import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.internal.generation.domain.BatchStatus;
 import com.pte.itembank.internal.generation.domain.JobStatus;
 import com.pte.itembank.internal.generation.domain.QuestionGenerationBatch;
@@ -19,6 +20,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -33,13 +35,19 @@ class BatchChainingServiceTest {
     private static final Instant NOW = Instant.parse("2026-11-17T10:00:00Z");
     private static final long BATCH = 40L;
     private static final long JOB = 5L;
+    private static final int PARALLEL = 3;
 
     private final GenerationJobRepository jobs = mock(GenerationJobRepository.class);
     private final GenerationJobItemRepository items = mock(GenerationJobItemRepository.class);
     private final GenerationBatchRepository batches = mock(GenerationBatchRepository.class);
     private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
-    private final BatchChainingService service = new BatchChainingService(jobs, items, batches, meters,
+    private final GenerationLimits limits = mock(GenerationLimits.class);
+    private final BatchChainingService service = new BatchChainingService(jobs, items, batches, meters, limits,
             Clock.fixed(NOW, ZoneOffset.UTC));
+
+    {
+        when(limits.maxConcurrentJobs()).thenReturn(PARALLEL);
+    }
 
     private QuestionGenerationBatch batch(BatchStatus status, boolean cancelRequested, int succeeded, int total) {
         QuestionGenerationBatch batch = new QuestionGenerationBatch();
@@ -62,10 +70,36 @@ class BatchChainingServiceTest {
     }
 
     @Test
+    void aFinishedChildFillsOnlyTheFreeParallelSlots() {
+        batch(BatchStatus.RUNNING, false, 0, 20);
+        finishedChild(JobStatus.COMPLETED, null);
+        when(jobs.countByBatchIdAndStatusIn(BATCH, JobStatus.ACTIVE)).thenReturn(1L);
+        when(jobs.promoteNext(eq(BATCH), anyInt())).thenReturn(2);
+
+        service.onChildTerminal(BATCH, JOB);
+
+        verify(jobs).promoteNext(BATCH, PARALLEL - 1);
+        verify(batches, never()).close(anyLong(), any(), any(), any());
+    }
+
+    @Test
+    void aFinishedChildPromotesNothingWhileTheOtherChildrenFillEverySlot() {
+        batch(BatchStatus.RUNNING, false, 0, 20);
+        finishedChild(JobStatus.COMPLETED, null);
+        when(jobs.countByBatchIdAndStatusIn(BATCH, JobStatus.ACTIVE)).thenReturn((long) PARALLEL);
+        when(jobs.existsByBatchIdAndStatusIn(BATCH, JobStatus.OPEN)).thenReturn(true);
+
+        service.onChildTerminal(BATCH, JOB);
+
+        verify(jobs, never()).promoteNext(anyLong(), anyInt());
+        verify(batches, never()).close(anyLong(), any(), any(), any());
+    }
+
+    @Test
     void aFinishedChildPromotesTheNextOne() {
         batch(BatchStatus.RUNNING, false, 0, 20);
         finishedChild(JobStatus.COMPLETED, null);
-        when(jobs.promoteNext(BATCH)).thenReturn(1);
+        when(jobs.promoteNext(eq(BATCH), anyInt())).thenReturn(1);
 
         service.onChildTerminal(BATCH, JOB);
 
@@ -95,7 +129,7 @@ class BatchChainingServiceTest {
         order.verify(items).cancelOpenUnleasedByBatch(BATCH, NOW);
         order.verify(jobs).cancelPending(BATCH, NOW, null);
         order.verify(batches).close(BATCH, BatchStatus.CANCELLED, null, NOW);
-        verify(jobs, never()).promoteNext(anyLong());
+        verify(jobs, never()).promoteNext(anyLong(), anyInt());
     }
 
     @Test
@@ -107,7 +141,7 @@ class BatchChainingServiceTest {
 
         verify(jobs).cancelPending(BATCH, NOW, "GENERATION_PROVIDER_AUTH");
         verify(batches).close(BATCH, BatchStatus.FAILED, "GENERATION_PROVIDER_AUTH", NOW);
-        verify(jobs, never()).promoteNext(anyLong());
+        verify(jobs, never()).promoteNext(anyLong(), anyInt());
     }
 
     @Test
@@ -125,7 +159,7 @@ class BatchChainingServiceTest {
     void anOrdinaryItemFailureDoesNotStopTheBatch() {
         batch(BatchStatus.RUNNING, false, 0, 20);
         finishedChild(JobStatus.FAILED, "GENERATION_VALIDATION_FAILED");
-        when(jobs.promoteNext(BATCH)).thenReturn(1);
+        when(jobs.promoteNext(eq(BATCH), anyInt())).thenReturn(1);
 
         service.onChildTerminal(BATCH, JOB);
 
@@ -147,7 +181,7 @@ class BatchChainingServiceTest {
     void aHookFailureIsCountedAndRethrownSoTheFinishRollsBack() {
         batch(BatchStatus.RUNNING, false, 0, 20);
         finishedChild(JobStatus.COMPLETED, null);
-        when(jobs.promoteNext(BATCH)).thenThrow(new IllegalStateException("boom"));
+        when(jobs.promoteNext(eq(BATCH), anyInt())).thenThrow(new IllegalStateException("boom"));
 
         assertThatThrownBy(() -> service.onChildTerminal(BATCH, JOB)).isInstanceOf(IllegalStateException.class);
         assertThat(meters.counter("generation.batch.hook.failures").count()).isEqualTo(1.0);
@@ -166,7 +200,7 @@ class BatchChainingServiceTest {
     void reconcileQueuesTheNextChildWhenOnlyWaitingChildrenRemain() {
         batch(BatchStatus.RUNNING, false, 0, 20);
         when(jobs.existsByBatchIdAndStatusIn(eq(BATCH), eq(JobStatus.ACTIVE))).thenReturn(false);
-        when(jobs.promoteNext(BATCH)).thenReturn(1);
+        when(jobs.promoteNext(eq(BATCH), anyInt())).thenReturn(1);
 
         service.reconcile(BATCH);
 
@@ -177,12 +211,13 @@ class BatchChainingServiceTest {
     void reconcileLeavesAHealthyOrClosedBatchAlone() {
         batch(BatchStatus.COMPLETED, false, 10, 10);
         service.reconcile(BATCH);
-        verify(jobs, never()).promoteNext(anyLong());
+        verify(jobs, never()).promoteNext(anyLong(), anyInt());
 
         batch(BatchStatus.RUNNING, false, 0, 20);
         when(jobs.existsByBatchIdAndStatusIn(eq(BATCH), any())).thenReturn(true);
+        when(jobs.countByBatchIdAndStatusIn(eq(BATCH), any())).thenReturn((long) PARALLEL);
         service.reconcile(BATCH);
-        verify(jobs, never()).promoteNext(anyLong());
+        verify(jobs, never()).promoteNext(anyLong(), anyInt());
         verify(batches, never()).close(anyLong(), any(), isNull(), any());
     }
 

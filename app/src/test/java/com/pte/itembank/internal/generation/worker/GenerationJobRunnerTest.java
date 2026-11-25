@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -91,6 +92,21 @@ class GenerationJobRunnerTest {
         verify(pipeline, never()).runItem(claim, admin, 1);
         verify(itemState).cancelOpen(claim);
         verify(leases).finish(claim, JobStatus.CANCELLED, null);
+    }
+
+    @Test
+    void anInterruptedItemEndsTheJobAsCancelledWhateverItReported() {
+        when(pipeline.runItem(claim, admin, 0)).thenAnswer(call -> {
+            Thread.currentThread().interrupt(); // what a cancel does to the provider call in progress
+            return ItemOutcome.FAILED;
+        });
+
+        runner.run(claim);
+
+        verify(pipeline, never()).runItem(claim, admin, 1);
+        verify(itemState).cancelOpen(claim);
+        verify(leases).finish(claim, JobStatus.CANCELLED, null);
+        assertThat(Thread.currentThread().isInterrupted()).isFalse();
     }
 
     @Test

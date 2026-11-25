@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.generation.config;
 
+import com.pte.billing.QuestionGenerationLimit;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.llm.NineRouterLlmGateway;
 import com.pte.itembank.internal.generation.usage.GenerationUsageRecorder;
@@ -51,13 +52,19 @@ public class QuestionGenerationConfig {
         return new NineRouterLlmGateway(restClient, properties, jsonMapper, usageRecorder);
     }
 
-    /** A dedicated single thread: a job runs for minutes and must not block the shared one-thread scheduler. */
+    /**
+     * Dedicated threads, so a job that runs for minutes never blocks the shared scheduler. Sized for the highest
+     * parallel-run setting; the setting in force (checked when a job is claimed) decides how many actually run, and
+     * idle threads time out.
+     */
     @Bean(name = QuestionGenerationConstants.EXECUTOR_NAME, destroyMethod = "shutdown")
     @ConditionalOnProperty(prefix = "itembank.generation", name = "enabled", havingValue = "true")
     ThreadPoolTaskExecutor questionGenerationExecutor() {
+        int threads = QuestionGenerationLimit.CONCURRENT_JOBS.maximum();
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(1);
-        executor.setMaxPoolSize(1);
+        executor.setCorePoolSize(threads);
+        executor.setMaxPoolSize(threads);
+        executor.setAllowCoreThreadTimeOut(true);
         executor.setQueueCapacity(0);
         executor.setThreadNamePrefix(QuestionGenerationConstants.EXECUTOR_THREAD_PREFIX);
         return executor;

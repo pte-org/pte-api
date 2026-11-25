@@ -9,6 +9,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,6 +30,38 @@ class QuestionGenerationWorkerTest {
             org.mockito.Mockito.mock(com.pte.itembank.internal.generation.live.GenerationLiveFeed.class));
     private final JobClaim claim = new JobClaim(5L, UUID.randomUUID(), UUID.randomUUID(), "MC_READING_SINGLE",
             CefrLevel.B2, QuestionPool.PRACTICE, null, "worker");
+
+    {
+        // One thread unless a test says otherwise: the single-job behaviour the older tests describe.
+        when(executor.getMaxPoolSize()).thenReturn(1);
+    }
+
+    @Test
+    void aCancelInterruptsTheJobRunningHereAndIgnoresOthers() {
+        when(leases.claimNext(anyString())).thenReturn(Optional.of(claim));
+        worker.tick();
+        ArgumentCaptor<Runnable> task = ArgumentCaptor.forClass(Runnable.class);
+        verify(executor).execute(task.capture());
+        FutureTask<?> running = (FutureTask<?>) task.getValue();
+
+        worker.onCancelRequested(new GenerationCancelRequested(UUID.randomUUID()));
+        assertThat(running.isCancelled()).isFalse();
+
+        worker.onCancelRequested(new GenerationCancelRequested(claim.jobPublicId()));
+        assertThat(running.isCancelled()).isTrue();
+    }
+
+    @Test
+    void oneTickFillsEveryFreeThreadAndNoMore() {
+        when(executor.getMaxPoolSize()).thenReturn(2);
+        when(leases.claimNext(anyString())).thenReturn(Optional.of(claim));
+
+        worker.tick();
+        worker.tick();
+
+        verify(leases, times(2)).claimNext(anyString());
+        verify(executor, times(2)).execute(any());
+    }
 
     @Test
     void anEmptyPollRunsNothing() {

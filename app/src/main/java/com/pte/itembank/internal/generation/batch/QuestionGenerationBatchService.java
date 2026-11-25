@@ -19,8 +19,10 @@ import com.pte.itembank.internal.generation.job.GenerationQuotaGuard;
 import com.pte.itembank.internal.generation.repository.GenerationBatchRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
+import com.pte.itembank.internal.generation.worker.GenerationCancelRequested;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,13 +50,15 @@ public class QuestionGenerationBatchService {
     private final GenerationQuotaGuard quota;
     private final AuditLogService audit;
     private final QuestionGenerationBatchQueryService queries;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public QuestionGenerationBatchService(BatchRequestValidator validator, GenerationJobRepository jobs,
                                           GenerationJobItemRepository items, GenerationBatchRepository batches,
                                           GenerationLimits limits, AuditLogService audit,
                                           QuestionGenerationBatchQueryService queries, GenerationQuotaGuard quota,
-                                          Clock clock) {
+                                          ApplicationEventPublisher events, Clock clock) {
+        this.events = events;
         this.quota = quota;
         this.queries = queries;
         this.validator = validator;
@@ -85,7 +89,8 @@ public class QuestionGenerationBatchService {
         List<QuestionGenerationJob> children;
         try {
             saved = batches.saveAndFlush(batch);
-            children = jobs.saveAllAndFlush(plans.stream().map(plan -> child(saved, valid, plan)).toList());
+            int parallel = limits.maxConcurrentJobs();
+            children = jobs.saveAllAndFlush(plans.stream().map(plan -> child(saved, valid, plan, parallel)).toList());
         } catch (DataIntegrityViolationException raced) {
             throw alreadyRunning();
         }
@@ -119,7 +124,8 @@ public class QuestionGenerationBatchService {
         jobs.cancelPending(batchId, now, null);
         jobs.findByBatchIdOrderByBatchSeqAsc(batchId).stream()
                 .filter(child -> JobStatus.LEASED.contains(child.getStatus()))
-                .forEach(child -> jobs.markCancelling(child.getPublicId()));
+                .filter(child -> jobs.markCancelling(child.getPublicId()) == 1)
+                .forEach(child -> events.publishEvent(new GenerationCancelRequested(child.getPublicId())));
         batches.refreshCounters(batchId, now);
         if (!jobs.existsByBatchIdAndStatusIn(batchId, JobStatus.OPEN)) {
             batches.close(batchId, BatchStatus.CANCELLED, null, now);
@@ -140,8 +146,9 @@ public class QuestionGenerationBatchService {
         }
     }
 
-    /** Only the first child is claimable; the others wait PENDING until the previous one finishes. */
-    private static QuestionGenerationJob child(QuestionGenerationBatch batch, ValidatedBatch valid, ChildPlan plan) {
+    /** The first {@code parallel} children are claimable at once; the others wait PENDING for a free slot. */
+    private static QuestionGenerationJob child(QuestionGenerationBatch batch, ValidatedBatch valid, ChildPlan plan,
+                                               int parallel) {
         BatchRow row = valid.rows().get(plan.rowIndex());
         QuestionGenerationJob job = new QuestionGenerationJob();
         job.setRequestedByUserPublicId(batch.getRequestedByUserPublicId());
@@ -152,7 +159,7 @@ public class QuestionGenerationBatchService {
         job.setImageKind(row.imageKind());
         job.setRequestedCount(plan.count());
         job.setSaveQuestions(true);
-        job.setStatus(plan.seq() == 0 ? JobStatus.QUEUED : JobStatus.PENDING);
+        job.setStatus(plan.seq() < parallel ? JobStatus.QUEUED : JobStatus.PENDING);
         job.setBatchId(batch.getId());
         job.setBatchSeq(plan.seq());
         job.setBatchRowIndex(plan.rowIndex());

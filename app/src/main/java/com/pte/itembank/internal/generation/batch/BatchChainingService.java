@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.generation.batch;
 
+import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.internal.generation.constant.BatchGenerationConstants;
 import com.pte.itembank.internal.generation.domain.BatchStatus;
 import com.pte.itembank.internal.generation.domain.JobStatus;
@@ -33,10 +34,13 @@ public class BatchChainingService {
     private final GenerationJobItemRepository items;
     private final GenerationBatchRepository batches;
     private final MeterRegistry meters;
+    private final GenerationLimits limits;
     private final Clock clock;
 
     public BatchChainingService(GenerationJobRepository jobs, GenerationJobItemRepository items,
-                                GenerationBatchRepository batches, MeterRegistry meters, Clock clock) {
+                                GenerationBatchRepository batches, MeterRegistry meters, GenerationLimits limits,
+                                Clock clock) {
+        this.limits = limits;
         this.jobs = jobs;
         this.items = items;
         this.batches = batches;
@@ -74,8 +78,8 @@ public class BatchChainingService {
         Instant now = clock.instant();
         if (batch.isCancelRequested()) {
             stopWaitingChildren(batchId, null, now);
-        } else if (!jobs.existsByBatchIdAndStatusIn(batchId, JobStatus.ACTIVE) && jobs.promoteNext(batchId) == 1) {
-            LOG.warn("Batch repaired, next child queued: batchId={}", batchId);
+        } else if (topUp(batchId) > 0) {
+            LOG.warn("Batch repaired, next children queued: batchId={}", batchId);
             return;
         }
         if (closeIfDone(batchId, null, now)) {
@@ -94,11 +98,21 @@ public class BatchChainingService {
                 ? job.getFailureCode() : null;
         if (batch.isCancelRequested() || fatalCode != null) {
             stopWaitingChildren(batchId, fatalCode, now);
-        } else if (jobs.promoteNext(batchId) == 1) {
+        } else if (topUp(batchId) > 0) {
             batches.refreshCounters(batchId, now);
             return;
         }
         closeIfDone(batchId, fatalCode, now);
+    }
+
+    /**
+     * Keeps as many children of the batch queued or running as generation runs in parallel: one finished child
+     * lets the next waiting one in, so the batch never holds more slots than the parallel-run setting.
+     */
+    private int topUp(long batchId) {
+        long open = jobs.countByBatchIdAndStatusIn(batchId, JobStatus.ACTIVE);
+        int free = (int) Math.max(0, limits.maxConcurrentJobs() - open);
+        return free == 0 ? 0 : jobs.promoteNext(batchId, free);
     }
 
     /** Items first: they are selected through the status of their (still waiting) child. */

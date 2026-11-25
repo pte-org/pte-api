@@ -18,11 +18,13 @@ import com.pte.itembank.internal.generation.exception.GenerationRequestInvalidEx
 import com.pte.itembank.internal.generation.repository.GenerationBatchRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
+import com.pte.itembank.internal.generation.worker.GenerationCancelRequested;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 
@@ -58,12 +60,14 @@ class QuestionGenerationJobServiceTest {
     private final CurrentUser admin = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
     private QuestionGenerationJobService service;
 
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+
     @BeforeEach
     void setUp() {
         properties.setEnabled(true);
         GenerationLimits limits = new GenerationLimits(mock(BillingSettingsService.class, call -> call.getArgument(1)), properties);
         service = new QuestionGenerationJobService(jobs, items, batches, catalog, properties, limits,
-                new GenerationQuotaGuard(jobs, limits, clock), clock);
+                new GenerationQuotaGuard(jobs, limits, clock), events, clock);
         when(catalog.find("MC_READING_SINGLE")).thenReturn(Optional.of(PteTaskType.MC_READING_SINGLE));
         when(jobs.saveAndFlush(any())).thenAnswer(call -> {
             QuestionGenerationJob job = call.getArgument(0);
@@ -258,6 +262,7 @@ class QuestionGenerationJobServiceTest {
 
         verify(items).cancelOpenUnleased(7L, NOW);
         verify(jobs, never()).markCancelling(any());
+        verify(events, never()).publishEvent(any(Object.class));
     }
 
     @Test
@@ -271,6 +276,7 @@ class QuestionGenerationJobServiceTest {
         service.cancel(publicId, admin);
 
         verify(items, never()).cancelOpenUnleased(anyLong(), any());
+        verify(events).publishEvent(new GenerationCancelRequested(publicId));
     }
 
     @Test
