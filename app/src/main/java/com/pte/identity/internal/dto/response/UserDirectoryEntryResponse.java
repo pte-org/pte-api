@@ -1,5 +1,7 @@
 package com.pte.identity.internal.dto.response;
 
+import com.pte.identity.domain.User;
+
 import java.util.UUID;
 
 /**
@@ -10,4 +12,14 @@ import java.util.UUID;
  * admin-performed action show as an "Unknown" actor.
  */
 public record UserDirectoryEntryResponse(UUID publicId, String fullName) {
+
+    /**
+     * The entry for a user. An account created without a full name (seed and bootstrap accounts) is shown by its
+     * username, so its actions never read as an unknown actor.
+     */
+    public static UserDirectoryEntryResponse from(User user) {
+        String name = user.getFullName();
+        return new UserDirectoryEntryResponse(user.getPublicId(),
+                name == null || name.isBlank() ? user.getUsername() : name);
+    }
 }

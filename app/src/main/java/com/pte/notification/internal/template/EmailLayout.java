@@ -196,6 +196,7 @@ final class EmailLayout {
             case "mono" -> "font-family:" + MONO + ";font-size:14px;line-height:20px;font-weight:700;color:" + HEADING
                     + ";word-break:break-all;\">" + plain(value);
             case "badge" -> badge(value, "#fef3c7", "#92400e");
+            case "badge-info" -> badge(value, "#dbeafe", "#1e40af");
             case "badge-success" -> badge(value, "#d1fae5", "#065f46");
             case "badge-danger" -> badge(value, "#fee2e2", "#991b1b");
             default -> "font-family:" + FONT + ";font-size:14px;line-height:20px;font-weight:700;color:" + HEADING

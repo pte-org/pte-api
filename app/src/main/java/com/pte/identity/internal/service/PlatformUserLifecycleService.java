@@ -68,9 +68,10 @@ public class PlatformUserLifecycleService {
         target.setMustChangePassword(true);
         userRepository.save(target);
         refreshTokenService.revokeAllForUser(target.getId());
+        String roleLabel = target.getRoles().stream().findFirst().map(com.pte.identity.domain.Role::displayLabel).orElse(null);
         eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(
                 UUID.randomUUID(), target.getPublicId(), null, target.getUsername(),
-                target.getEmail(), target.getFullName(), temporaryPassword));
+                target.getEmail(), target.getFullName(), temporaryPassword, roleLabel, false));
         auditLogService.record(caller, IdentityConstants.PLATFORM_USER_AGGREGATE, publicId.toString(),
                 IdentityConstants.PLATFORM_USER_PASSWORD_RESET,
                 IdentityConstants.PLATFORM_USER_PASSWORD_RESET_SUMMARY);

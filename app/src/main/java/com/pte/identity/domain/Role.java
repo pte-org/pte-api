@@ -15,5 +15,19 @@ public enum Role {
     HOST_ADMIN,
     PROCTOR,
     EXAMINER,
-    STUDENT
+    STUDENT;
+
+    /** Human-friendly label shown in account welcome and credential emails. */
+    public String displayLabel() {
+        return switch (this) {
+            case PLATFORM_ADMIN -> "Platform Admin";
+            case PLATFORM_MANAGER -> "Platform Manager";
+            case ACADEMIC_MANAGER -> "Academic Manager";
+            case ACADEMIC_STAFF, PLATFORM_AUTHOR -> "Academic Staff";
+            case HOST_ADMIN -> "Host Admin";
+            case PROCTOR -> "Proctor";
+            case EXAMINER -> "Examiner";
+            case STUDENT -> "Student";
+        };
+    }
 }

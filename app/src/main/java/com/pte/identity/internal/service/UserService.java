@@ -157,7 +157,7 @@ public class UserService {
             return List.of();
         }
         return userRepository.findActiveByOrganization(tenantId).stream()
-                .map(user -> new UserDirectoryEntryResponse(user.getPublicId(), user.getFullName()))
+                .map(UserDirectoryEntryResponse::from)
                 .toList();
     }
 

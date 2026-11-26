@@ -1,5 +1,6 @@
 package com.pte.support.internal.service;
 
+import com.pte.identity.IdentityService;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.support.domain.SupportTicket;
@@ -44,13 +45,15 @@ class SupportTicketEventPublicationTest {
     private AuditLogService auditLogService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private IdentityService identityService;
 
     private SupportTicketService service;
 
     @BeforeEach
     void setUp() {
         service = new SupportTicketService(ticketRepository, noteRepository, entityReferenceValidator,
-                auditLogService, eventPublisher);
+                auditLogService, eventPublisher, identityService);
     }
 
     @Test

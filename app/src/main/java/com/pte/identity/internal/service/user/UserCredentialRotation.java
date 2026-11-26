@@ -73,9 +73,10 @@ public class UserCredentialRotation {
             throw new UserEmailRequiredException();
         }
         String temporaryPassword = rotateTemporaryPassword(target);
+        String roleLabel = target.roles().stream().findFirst().map(Role::displayLabel).orElse(null);
         eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(
                 UUID.randomUUID(), user.getPublicId(), target.organizationId(), user.getUsername(), user.getEmail(),
-                user.getFullName(), temporaryPassword));
+                user.getFullName(), temporaryPassword, roleLabel, false));
         auditLogService.record(caller, IdentityConstants.USER_AGGREGATE, publicId.toString(),
                 IdentityConstants.USER_CREDENTIALS_EMAILED, IdentityConstants.USER_CREDENTIALS_EMAILED_SUMMARY);
         return new GeneratedCredentialsResponse(user.getPublicId(), user.getUsername(), user.getEmail(),

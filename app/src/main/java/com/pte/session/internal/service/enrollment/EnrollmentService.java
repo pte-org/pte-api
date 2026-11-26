@@ -259,7 +259,7 @@ public class EnrollmentService {
     }
 
     private void publishEnrolled(ExamSession session, UUID studentPublicId) {
-        eventPublisher.publishEvent(
-                new StudentEnrolledEvent(session.getPublicId(), studentPublicId, session.getTenantId()));
+        eventPublisher.publishEvent(new StudentEnrolledEvent(session.getPublicId(), studentPublicId,
+                session.getTenantId(), session.getName(), session.getOpensAt(), session.getClosesAt()));
     }
 }
