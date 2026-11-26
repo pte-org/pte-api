@@ -29,13 +29,18 @@ public class GenerationLiveFeed {
         LiveJob job = registry.open(jobPublicId);
         return new TokenSink() {
             @Override
-            public void begin() {
-                job.begin(index, agent, registry.clock().instant());
+            public void begin(String model) {
+                job.begin(index, agent, model, registry.clock().instant());
             }
 
             @Override
             public void accept(String delta) {
                 job.token(index, agent, delta, registry.clock().instant());
+            }
+
+            @Override
+            public void thinking(String delta) {
+                job.thinking(index, agent, delta, registry.clock().instant());
             }
         };
     }

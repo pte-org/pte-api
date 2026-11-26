@@ -37,13 +37,13 @@ public class MediaRenderer {
     private static final String IMAGE_PNG = "image/png";
     private static final String AUDIO_PROMPT = "AUDIO_PROMPT";
     private static final String IMAGE_PROMPT = "IMAGE_PROMPT";
-    private static final double SPEED_STEP = 0.1;
     private static final String NARRATOR = "N";
     private static final int VOICE_PICK_ATTEMPTS = 12;
 
     private final KokoroSpeechClient speech;
     private final VoicePicker voices;
     private final AudioDurationProbe probe;
+    private final SpeechFitter fitter;
     private final DialogueSynthesizer dialogue;
     private final ChartRenderer charts;
     private final MediaService media;
@@ -54,7 +54,8 @@ public class MediaRenderer {
     public MediaRenderer(KokoroSpeechClient speech, VoicePicker voices, AudioDurationProbe probe,
                          DialogueSynthesizer dialogue, ChartRenderer charts, MediaService media,
                          ObjectProvider<LlmGateway> painter, QuestionGenerationProperties properties,
-                         PromptRegistry prompts) {
+                         PromptRegistry prompts, SpeechFitter fitter) {
+        this.fitter = fitter;
         this.prompts = prompts;
         this.painter = painter;
         this.properties = properties;
@@ -71,16 +72,16 @@ public class MediaRenderer {
      * question being made, which picks the folder the files are stored in.
      */
     public Optional<RenderedMedia> render(ItemDraft draft, String taskTypeKey, int itemIndex, long seed,
-                                          CurrentUser owner, QuestionPool pool) {
+                                          CurrentUser owner, QuestionPool pool, BatchPosition position) {
         String poolName = pool == null ? null : pool.name();
         try {
             return switch (draft) {
-                case ItemDraft.ListeningDraft d -> Optional.of(speak(d.transcript(), taskTypeKey, itemIndex, seed, owner,
-                        poolName));
-                case ItemDraft.HiwDraft d -> Optional.of(speak(d.transcript(), taskTypeKey, itemIndex, seed, owner,
-                        poolName));
-                case ItemDraft.DialogueDraft d -> Optional.of(converse(d, taskTypeKey, itemIndex, seed, owner,
-                        poolName));
+                case ItemDraft.ListeningDraft d -> Optional.of(speak(d.transcript(), taskTypeKey, itemIndex, seed, position,
+                        owner, poolName));
+                case ItemDraft.HiwDraft d -> Optional.of(speak(d.transcript(), taskTypeKey, itemIndex, seed, position,
+                        owner, poolName));
+                case ItemDraft.DialogueDraft d -> Optional.of(converse(d, taskTypeKey, itemIndex, seed, position,
+                        owner, poolName));
                 case ItemDraft.ChartDraft d -> Optional.of(draw(d, owner, poolName));
                 case ItemDraft.PictureDraft d -> Optional.of(paint(d, owner, poolName));
                 default -> Optional.empty();
@@ -95,22 +96,13 @@ public class MediaRenderer {
         }
     }
 
-    private RenderedMedia speak(String text, String taskTypeKey, int itemIndex, long seed, CurrentUser owner,
-                                String pool) {
-        String voice = voices.pick(itemIndex, seed);
-        double speed = AudioDurationRules.baseSpeed(taskTypeKey);
-        byte[] audio = speech.synthesize(text, voice, speed);
-        Optional<AudioDurationRules.Range> rule = AudioDurationRules.forTask(taskTypeKey);
-        double seconds = probe.durationSeconds(audio);
-        if (rule.isPresent() && !rule.get().contains(seconds)) {
-            // One more attempt at a speed that moves the length toward the range.
-            speed = rule.get().isTooShort(seconds) ? speed - SPEED_STEP : speed + SPEED_STEP;
-            audio = speech.synthesize(text, voice, speed);
-            seconds = probe.durationSeconds(audio);
-            if (!rule.get().contains(seconds)) {
-                throw durationOutOfRange(seconds, rule.get());
-            }
-        }
+    private RenderedMedia speak(String text, String taskTypeKey, int itemIndex, long seed, BatchPosition position,
+                                CurrentUser owner, String pool) {
+        String voice = voices.pick(itemIndex, seed, position);
+        SpeechFitter.FittedSpeech fitted = fitter.fit(text, voice, taskTypeKey);
+        byte[] audio = fitted.audio();
+        double speed = fitted.speed();
+        double seconds = fitted.seconds();
         UUID ref = media.storeGenerated(audio, AUDIO_WAV, AUDIO_PROMPT, pool, owner);
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("audioPromptRef", ref.toString());
@@ -121,8 +113,8 @@ public class MediaRenderer {
     }
 
     private RenderedMedia converse(ItemDraft.DialogueDraft draft, String taskTypeKey, int itemIndex, long seed,
-                                   CurrentUser owner, String pool) {
-        Map<String, String> voiceBySpeaker = distinctVoices(draft, itemIndex, seed);
+                                   BatchPosition position, CurrentUser owner, String pool) {
+        Map<String, String> voiceBySpeaker = distinctVoices(draft, itemIndex, seed, position);
         List<DialogueSynthesizer.DialogueTurn> clips = new ArrayList<>();
         if (hasSituation(draft)) {
             clips.add(new DialogueSynthesizer.DialogueTurn(NARRATOR,
@@ -136,7 +128,7 @@ public class MediaRenderer {
         double seconds = probe.durationSeconds(audio);
         Optional<AudioDurationRules.Range> rule = AudioDurationRules.forTask(taskTypeKey);
         if (rule.isPresent() && !rule.get().contains(seconds)) {
-            throw durationOutOfRange(seconds, rule.get());
+            throw SpeechFitter.durationOutOfRange(seconds, rule.get());
         }
         UUID ref = media.storeGenerated(audio, AUDIO_WAV, AUDIO_PROMPT, pool, owner);
         Map<String, Object> meta = new LinkedHashMap<>();
@@ -146,17 +138,13 @@ public class MediaRenderer {
         return new RenderedMedia(ref, null, meta);
     }
 
-    private static GenerationMediaException durationOutOfRange(double seconds, AudioDurationRules.Range range) {
-        return new GenerationMediaException(QuestionGenerationConstants.GENERATION_AUDIO_DURATION_OUT_OF_RANGE,
-                "audio " + Math.round(seconds * 10.0) / 10.0 + "s, expected " + range.min() + "-" + range.max() + "s");
-    }
-
     private static boolean hasSituation(ItemDraft.DialogueDraft draft) {
         return draft.situation() != null && !draft.situation().isBlank();
     }
 
     /** A different voice per speaker (and for the narrator), so the listener can tell them apart. */
-    private Map<String, String> distinctVoices(ItemDraft.DialogueDraft draft, int itemIndex, long seed) {
+    private Map<String, String> distinctVoices(ItemDraft.DialogueDraft draft, int itemIndex, long seed,
+                                               BatchPosition position) {
         Set<String> speakers = new LinkedHashSet<>();
         if (hasSituation(draft)) {
             speakers.add(NARRATOR);
@@ -165,10 +153,11 @@ public class MediaRenderer {
         Map<String, String> assigned = new LinkedHashMap<>();
         int offset = 0;
         for (String speaker : speakers) {
-            String voice = voices.pick(itemIndex + offset, seed + offset);
+            // Each speaker takes the next place of the batch's sequence, so the next one differs in accent and gender.
+            String voice = voices.pick(itemIndex + offset, seed + offset, position);
             for (int tries = 0; assigned.containsValue(voice) && tries < VOICE_PICK_ATTEMPTS; tries++) {
                 offset++;
-                voice = voices.pick(itemIndex + offset, seed + offset);
+                voice = voices.pick(itemIndex + offset, seed + offset, position);
             }
             assigned.put(speaker, voice);
             offset++;

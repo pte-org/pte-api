@@ -53,7 +53,7 @@ class GenerationLimitsTest {
 
         assertThat(defaults.getMaxItemsPerUserPerDay()).isEqualTo(100);
         assertThat(defaults.getMaxItemsPerDayGlobal()).isEqualTo(300);
-        assertThat(defaults.getMaxItemsPerBatch()).isEqualTo(50);
+        assertThat(defaults.getMaxItemsPerBatch()).isZero();
         assertThat(properties.isBatchEnabled()).isFalse();
     }
 }

@@ -55,8 +55,6 @@ public class MetricsCalculator {
     /**
      * Counts sentences by splitting on sentence-ending punctuation: . ! ? followed by space or end.
      */
-    private int sentenceCount;
-
     private int countSentences(String text) {
         if (text == null || text.isBlank()) {
             return 0;

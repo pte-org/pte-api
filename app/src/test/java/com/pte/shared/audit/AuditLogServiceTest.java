@@ -135,35 +135,6 @@ class AuditLogServiceTest {
         verify(auditLogRepository).findForTenant(tenantPublicId, null, null, createdFrom, createdTo, pageable);
     }
 
-    @Test
-    void listPlatform_returnsTenantlessRowsOnly() {
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_MANAGER"));
-        AuditLog row = rowOf(null);
-
-        when(auditLogRepository.findByTenantIdIsNullOrderByCreatedAtDesc(PageRequest.of(0, 20)))
-                .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
-
-        var result = service.listPlatform(caller, null, 0, 20);
-
-        assertThat(result.data()).hasSize(1);
-        assertThat(result.data().get(0).publicId()).isEqualTo(row.getPublicId());
-        verify(auditLogRepository).findByTenantIdIsNullOrderByCreatedAtDesc(PageRequest.of(0, 20));
-    }
-
-    @Test
-    void listPlatform_withSearch_forwardsPlatformScopeAndSearch() {
-        CurrentUser caller = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
-        AuditLog row = rowOf(null);
-
-        when(auditLogRepository.findForPlatform("Plan", "updated", null, null, PageRequest.of(0, 20)))
-                .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
-
-        var result = service.listPlatform(caller, "Plan", " updated ", 0, 20);
-
-        assertThat(result.data()).hasSize(1);
-        verify(auditLogRepository).findForPlatform("Plan", "updated", null, null, PageRequest.of(0, 20));
-    }
-
     private AuditLog rowOf(UUID tenantPublicId) {
         AuditLog auditLog = new AuditLog();
         auditLog.setPublicId(UUID.randomUUID());

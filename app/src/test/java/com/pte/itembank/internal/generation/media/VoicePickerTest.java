@@ -2,64 +2,93 @@ package com.pte.itembank.internal.generation.media;
 
 import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Unit tests for VoicePicker.
- */
+/** Unit tests for VoicePicker. */
 class VoicePickerTest {
 
     @Test
     void testPickAlternatesAccents() {
-        var picker = createPickerWithVoices("af_heart,af_bella", "bf_emma,bm_george");
+        var picker = pickerWithDisabled("");
         long seed = 12345L;
 
-        String voice0 = picker.pick(0, seed); // Even index -> US
-        String voice1 = picker.pick(1, seed); // Odd index -> UK
-        String voice2 = picker.pick(2, seed); // Even index -> US
+        boolean first = isUk(picker.pick(0, seed));
+        assertNotEquals(first, isUk(picker.pick(1, seed)), "Neighbouring items should use different accents");
+        assertEquals(first, isUk(picker.pick(2, seed)), "Every other item should share the accent");
+    }
 
-        assertTrue(voice0.equals("af_heart") || voice0.equals("af_bella"), "Voice 0 should be US");
-        assertTrue(voice1.equals("bf_emma") || voice1.equals("bm_george"), "Voice 1 should be UK");
-        assertTrue(voice2.equals("af_heart") || voice2.equals("af_bella"), "Voice 2 should be US");
+    @Test
+    void firstItemsOfManyJobsUseBothAccents() {
+        var picker = pickerWithDisabled("");
+        int ukCount = 0;
+        int jobs = 200;
+        for (long seed = 0; seed < jobs; seed++) {
+            if (isUk(picker.pick(0, seed * 7919L))) {
+                ukCount++;
+            }
+        }
+        // A batch runs one item per job, so its accents come only from the seed.
+        assertTrue(ukCount > jobs / 4 && ukCount < jobs * 3 / 4, "UK voices picked: " + ukCount);
     }
 
     @Test
     void testPickDeterministicWithSeed() {
-        var picker = createPickerWithVoices("af_heart,af_bella,am_michael", "bf_emma,bm_george");
-        long seed = 100L;
-
-        String voice1a = picker.pick(0, seed);
-        String voice1b = picker.pick(0, seed);
-
-        assertEquals(voice1a, voice1b, "Same index and seed should return same voice");
+        var picker = pickerWithDisabled("");
+        assertEquals(picker.pick(0, 100L), picker.pick(0, 100L), "Same index and seed should return same voice");
     }
 
     @Test
-    void testPickDifferentWithDifferentIndex() {
-        var picker = createPickerWithVoices("af_heart,af_bella", "bf_emma,bm_george");
-        long seed = 123L;
-
-        String voice0 = picker.pick(0, seed);
-        String voice1 = picker.pick(1, seed);
-
-        assertNotEquals(voice0, voice1, "Different indices should likely return different voices (or different accents)");
+    void usesTheOtherAccentWhenOneIsSwitchedOff() {
+        var picker = pickerWithDisabled("bf_emma,bf_alice,bf_isabella,bf_lily,bm_george,bm_daniel,bm_fable,bm_lewis");
+        for (long seed = 0; seed < 20; seed++) {
+            assertTrue(picker.pick(0, seed).startsWith("a"), "Only American voices are left");
+        }
     }
 
     @Test
-    void testPickWithEmptyConfig() {
-        var picker = createPickerWithVoices("", "");
-        String voice = picker.pick(0, 123L);
-        assertEquals("af_heart", voice, "Should return fallback voice when config is empty");
+    void neverPicksADisabledVoice() {
+        var picker = pickerWithDisabled("af_heart,am_michael");
+        for (long seed = 0; seed < 200; seed++) {
+            String voice = picker.pick((int) (seed % 3), seed);
+            assertNotEquals("af_heart", voice);
+            assertNotEquals("am_michael", voice);
+        }
     }
 
-    private VoicePicker createPickerWithVoices(String usVoices, String ukVoices) {
-        var props = mock(QuestionGenerationProperties.class);
-        var kokoroProps = mock(QuestionGenerationProperties.Kokoro.class);
-        when(props.getKokoro()).thenReturn(kokoroProps);
-        when(kokoroProps.getVoicesUs()).thenReturn(usVoices);
-        when(kokoroProps.getVoicesUk()).thenReturn(ukVoices);
-        return new VoicePicker(props);
+    @Test
+    void aJobOutsideAnyBatchPicksAsBefore() {
+        var picker = pickerWithDisabled("");
+        for (long seed = 0; seed < 30; seed++) {
+            assertEquals(picker.pick(1, seed), picker.pick(1, seed, null));
+        }
+    }
+
+    @Test
+    void aBatchJobFollowsTheBatchSequenceNotItsOwnSeed() {
+        var picker = pickerWithDisabled("");
+        var assigner = new VoiceAssigner(EnabledVoicesTest.enabledWith("", new MockEnvironment()));
+        var position = new BatchPosition(4242L, 6);
+        for (int item = 0; item < 3; item++) {
+            assertEquals(assigner.assign(4242L, 6 + item), picker.pick(item, 999L + item, position));
+        }
+    }
+
+    private static boolean isUk(String voice) {
+        return voice.startsWith("b");
+    }
+
+    static VoicePicker pickerWithDisabled(String disabled) {
+        var enabled = EnabledVoicesTest.enabledWith(disabled, new MockEnvironment());
+        return new VoicePicker(enabled, new VoiceAssigner(enabled));
+    }
+
+    static QuestionGenerationProperties propertiesWithDisabled(String disabled) {
+        var properties = new QuestionGenerationProperties();
+        properties.getKokoro().setVoicesDisabled(disabled);
+        return properties;
     }
 }

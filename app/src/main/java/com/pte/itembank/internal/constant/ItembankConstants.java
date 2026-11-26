@@ -80,6 +80,7 @@ public final class ItembankConstants {
             "Legacy ownerless academic resources require platform-admin override";
     public static final String AUDIT_CREATED = "CREATED";
     public static final String AUDIT_UPDATED = "UPDATED";
+    public static final String AUDIT_AUDIO_VOICE_CHANGED = "AUDIO_VOICE_CHANGED";
     public static final String AUDIT_REVISION_CREATED = "REVISION_CREATED";
     public static final String AUDIT_SUBMITTED = "SUBMITTED_FOR_APPROVAL";
     public static final String AUDIT_APPROVED = "APPROVED";
@@ -91,6 +92,7 @@ public final class ItembankConstants {
     /** Audit trail summaries for question lifecycle actions (stored, not shown to end users). */
     public static final String AUDIT_SUMMARY_CREATED = "Created question draft";
     public static final String AUDIT_SUMMARY_UPDATED = "Updated question draft";
+    public static final String AUDIT_SUMMARY_AUDIO_VOICE_CHANGED = "Changed the spoken voice %s->%s, audio %s->%s";
     public static final String AUDIT_SUMMARY_AVAILABILITY_CHANGED =
             "; availability exam %s->%s, practice %s->%s";
     public static final String AUDIT_SUMMARY_REVISION_CREATED = "Created question revision %d";

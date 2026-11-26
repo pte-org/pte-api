@@ -68,17 +68,17 @@ public class GenerationPipeline {
         this.liveFeed = liveFeed;
     }
 
-    public ItemOutcome runItem(JobClaim claim, CurrentUser caller, int index) {
+    public ItemOutcome runItem(JobClaim claim, CurrentUser caller, int index, Runnable renewLease) {
         GenerationLiveContext.open(liveFeed, claim.jobPublicId(), index);
         try {
-            return run(claim, caller, index);
+            return run(claim, caller, index, renewLease);
         } finally {
             GenerationLiveContext.close();
             liveFeed.itemEnded(claim.jobPublicId(), index);
         }
     }
 
-    private ItemOutcome run(JobClaim claim, CurrentUser caller, int index) {
+    private ItemOutcome run(JobClaim claim, CurrentUser caller, int index, Runnable renewLease) {
         if (!advance(claim, index, ItemStage.GENERATING)) {
             return ItemOutcome.LEASE_LOST;
         }
@@ -86,7 +86,7 @@ public class GenerationPipeline {
         RenderedMedia stored = null;
         try {
             int maxCalls = allowance.maxCallsPerItem();
-            GenerationCallBudget budget = new GenerationCallBudget(maxCalls);
+            GenerationCallBudget budget = new GenerationCallBudget(maxCalls, renewLease);
 
             ItemGenerator generator = generators.stream()
                     .filter(candidate -> candidate.supports(claim.taskTypeKey())).findFirst().orElse(null);
@@ -164,7 +164,7 @@ public class GenerationPipeline {
                 Optional<RenderedMedia> media;
                 try {
                     media = mediaRenderer.render(item.draft(), claim.taskTypeKey(), index,
-                            claim.jobPublicId().getLeastSignificantBits(), caller, claim.pool());
+                            claim.jobPublicId().getLeastSignificantBits(), caller, claim.pool(), claim.batchPosition());
                 } catch (GenerationMediaException mediaFailure) {
                     if (request.isPicture() && QuestionGenerationConstants.GENERATION_IMAGE_FAILED
                             .equals(mediaFailure.getCode()) && images.fallsBackToChart()

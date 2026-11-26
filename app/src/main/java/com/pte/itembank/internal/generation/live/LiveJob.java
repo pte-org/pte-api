@@ -29,16 +29,22 @@ final class LiveJob {
         lastActivity = now;
     }
 
-    synchronized void begin(int index, LlmRole agent, Instant now) {
-        int attempt = item(index).begin(agent);
+    synchronized void begin(int index, LlmRole agent, String model, Instant now) {
+        int attempt = item(index).begin(agent, model);
         touch(now);
-        send(GenerationLiveConstants.EVENT_BEGIN, new LiveEvent.Begin(index, agent.name(), attempt));
+        send(GenerationLiveConstants.EVENT_BEGIN, new LiveEvent.Begin(index, agent.name(), attempt, model));
     }
 
     synchronized void token(int index, LlmRole agent, String delta, Instant now) {
         item(index).append(agent, delta);
         touch(now);
         send(GenerationLiveConstants.EVENT_TOKEN, new LiveEvent.Token(index, agent.name(), delta));
+    }
+
+    synchronized void thinking(int index, LlmRole agent, String delta, Instant now) {
+        item(index).think(agent, delta);
+        touch(now);
+        send(GenerationLiveConstants.EVENT_THINKING, new LiveEvent.Thinking(index, agent.name(), delta));
     }
 
     synchronized void stage(int index, String stage, Instant now) {

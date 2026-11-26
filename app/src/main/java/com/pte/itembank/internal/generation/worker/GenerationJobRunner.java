@@ -61,7 +61,13 @@ public class GenerationJobRunner {
                 leases.finish(claim, JobStatus.CANCELLED, null);
                 return;
             }
-            ItemOutcome outcome = pipeline.runItem(claim, caller.get(), index);
+            // Renewed again before every provider call: one question may take many slow calls.
+            ItemOutcome outcome = pipeline.runItem(claim, caller.get(), index, () -> leases.renewLease(claim));
+            // Interrupted by a cancel: whatever the item reported, the job stops now. Clearing the flag first keeps
+            // the closing database calls from failing on it.
+            if (Thread.interrupted()) {
+                outcome = ItemOutcome.CANCELLED;
+            }
             providerOutages = outcome == ItemOutcome.FAILED_PROVIDER_UNAVAILABLE ? providerOutages + 1 : 0;
             if (outcome == ItemOutcome.LEASE_LOST) {
                 return;

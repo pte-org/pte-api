@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.http.ResponseEntity;
 import com.pte.itembank.internal.service.QuestionDeletionService;
+import com.pte.itembank.internal.service.QuestionRevisionQuery;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -38,10 +40,13 @@ public class QuestionController {
 
     private final ItembankService itembankService;
     private final QuestionDeletionService questionDeletionService;
+    private final QuestionRevisionQuery questionRevisionQuery;
 
-    public QuestionController(ItembankService itembankService, QuestionDeletionService questionDeletionService) {
+    public QuestionController(ItembankService itembankService, QuestionDeletionService questionDeletionService,
+            QuestionRevisionQuery questionRevisionQuery) {
         this.itembankService = itembankService;
         this.questionDeletionService = questionDeletionService;
+        this.questionRevisionQuery = questionRevisionQuery;
     }
 
     @PostMapping
@@ -52,6 +57,12 @@ public class QuestionController {
     @GetMapping("/{publicId}")
     public ApiResponse<QuestionResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(itembankService.get(publicId, currentUser()));
+    }
+
+    /** Every revision of the question's group, newest first, so the client can compare two versions. */
+    @GetMapping("/{publicId}/revisions")
+    public ApiResponse<List<QuestionResponse>> revisions(@PathVariable UUID publicId) {
+        return ApiResponse.success(questionRevisionQuery.revisions(publicId));
     }
 
     @DeleteMapping("/{publicId}")

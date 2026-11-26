@@ -1,6 +1,7 @@
 package com.pte.itembank.internal.generation.pipeline;
 
 import com.pte.itembank.internal.generation.domain.ImageKind;
+import com.pte.itembank.internal.generation.media.BatchPosition;
 import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.domain.enums.QuestionPool;
 
@@ -9,7 +10,15 @@ import java.util.UUID;
 /** A job a worker owns (until its lease lapses): everything the pipeline needs, copied out of the entity. */
 public record JobClaim(Long jobId, UUID jobPublicId, UUID requesterId, String taskTypeKey, CefrLevel cefrLevel,
                        QuestionPool pool, String topicHint, String workerId, boolean saveQuestions,
-                       ImageKind imageKind) {
+                       ImageKind imageKind, BatchPosition batchPosition) {
+
+    /** A job outside any batch speaks with voices of its own choosing ({@code batchPosition} null). */
+    public JobClaim(Long jobId, UUID jobPublicId, UUID requesterId, String taskTypeKey, CefrLevel cefrLevel,
+                    QuestionPool pool, String topicHint, String workerId, boolean saveQuestions,
+                    ImageKind imageKind) {
+        this(jobId, jobPublicId, requesterId, taskTypeKey, cefrLevel, pool, topicHint, workerId, saveQuestions,
+                imageKind, null);
+    }
 
     public JobClaim(Long jobId, UUID jobPublicId, UUID requesterId, String taskTypeKey, CefrLevel cefrLevel,
                     QuestionPool pool, String topicHint, String workerId, boolean saveQuestions) {

@@ -38,7 +38,7 @@ class DynamicTaskTypeServiceTest {
     private final RuntimeContractResolver contractResolver = mock(RuntimeContractResolver.class);
     private final CurrentUser admin = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"));
     private final DynamicTaskTypeService service =
-            new DynamicTaskTypeService(repository, contractResolver, null, null);
+            new DynamicTaskTypeService(repository, contractResolver, null, null, null);
 
     @Test
     void aCustomTaskTypeInheritsTheAuthoringRequirementsOfItsRuntimeContract() {

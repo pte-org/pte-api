@@ -23,6 +23,7 @@ import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.SecurityRoles;
+import com.pte.shared.audit.AuditLogChangeWriter;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.constant.SharedConstants;
 import org.springframework.security.access.AccessDeniedException;
@@ -49,11 +50,14 @@ public class BlueprintService {
     private final ExamDefinitionService examDefinitionService;
     private final SnapshotPublishService snapshotPublishService;
     private final AuditLogService auditLogService;
+    private final AuditLogChangeWriter changeWriter;
 
     @Autowired
     public BlueprintService(ExamBlueprintRepository blueprintRepository, AssessmentAccessPolicy accessPolicy,
             ItembankService itembankService, ExamDefinitionService examDefinitionService,
-            SnapshotPublishService snapshotPublishService, AuditLogService auditLogService) {
+            SnapshotPublishService snapshotPublishService, AuditLogService auditLogService,
+            AuditLogChangeWriter changeWriter) {
+        this.changeWriter = changeWriter;
         this.blueprintRepository = blueprintRepository;
         this.accessPolicy = accessPolicy;
         this.itembankService = itembankService;
@@ -71,7 +75,8 @@ public class BlueprintService {
         blueprint.setAuthorUserPublicId(caller.userId());
         replaceItems(blueprint, request.items(), Boolean.TRUE.equals(request.preserveOrder()));
         BlueprintResponse response = BlueprintMapper.toResponse(blueprintRepository.save(blueprint));
-        audit(caller, AssessmentConstants.AUDIT_CREATED, blueprint, "Created blueprint draft");
+        BlueprintAuditState.write(changeWriter, auditLogService, caller, AssessmentConstants.AUDIT_CREATED, blueprint,
+                "Created blueprint draft", null);
         return response;
     }
 
@@ -80,10 +85,12 @@ public class BlueprintService {
         ExamBlueprint blueprint = loadWritable(publicId, caller);
         requireStatus(blueprint, BlueprintStatus.DRAFT);
         checkVersion(blueprint, request.version());
+        BlueprintAuditState before = BlueprintAuditState.of(blueprint);
         blueprint.setName(request.name().trim());
         replaceItems(blueprint, request.items(), Boolean.TRUE.equals(request.preserveOrder()));
         blueprint.setRejectionReason(null);
-        audit(caller, AssessmentConstants.AUDIT_UPDATED, blueprint, "Updated blueprint draft");
+        BlueprintAuditState.write(changeWriter, auditLogService, caller, AssessmentConstants.AUDIT_UPDATED, blueprint,
+                "Updated blueprint draft", before);
         return BlueprintMapper.toResponse(blueprint);
     }
 

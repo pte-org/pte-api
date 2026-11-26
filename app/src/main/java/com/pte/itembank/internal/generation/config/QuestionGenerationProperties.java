@@ -38,6 +38,12 @@ public class QuestionGenerationProperties {
 
     @Valid
     private final Llm llm = new Llm();
+    /**
+     * A provider asked before {@link #llm} for generation only (an empty base URL means none). When it fails (quota
+     * gone, outage) the call goes to {@link #llm}, which the student chat and scoring keep using on their own.
+     */
+    @Valid
+    private final Llm primary = new Llm();
     @Valid
     private final Kokoro kokoro = new Kokoro();
     @Valid
@@ -61,7 +67,11 @@ public class QuestionGenerationProperties {
         @Min(0)
         private int maxTokens = 0;
         private Duration connectTimeout = Duration.ofSeconds(5);
-        private Duration readTimeout = Duration.ofSeconds(90);
+        /**
+         * Longest silence allowed while reading one answer. A free fallback model behind the gateway sends nothing
+         * until its whole answer (thoughts included) is ready, which took close to a minute when measured.
+         */
+        private Duration readTimeout = Duration.ofSeconds(150);
         private Duration retryDelay = Duration.ofSeconds(2);
         /** Text-to-image model of the same gateway, for Describe Image pictures. */
         private String imageModel = "ag/gemini-3.1-flash-image";
@@ -83,8 +93,8 @@ public class QuestionGenerationProperties {
         private String webUrl = "";
         private String apiKey = "";
         private Duration timeout = Duration.ofSeconds(300);
-        private String voicesUs = "af_heart,af_bella,am_michael";
-        private String voicesUk = "bf_emma,bm_george";
+        /** Comma-separated catalog voice codes to leave out, for a speech server that lacks them. Empty = all. */
+        private String voicesDisabled = "";
     }
 
     @Getter
@@ -131,10 +141,11 @@ public class QuestionGenerationProperties {
         @Min(100)
         private long pollDelayMs = 3000;
         /**
-         * How long a worker owns a job without renewing. It is renewed before every provider call, so it only has to
-         * outlive the slowest single call (read timeout, one retry and delay), with a wide margin.
+         * How long a worker owns a job without renewing. It is renewed before every question and every provider call,
+         * so it only has to outlive the slowest single call plus the media work after it: two attempts of 150s read
+         * timeout and the retry delay come to about 5 minutes, which leaves a wide margin.
          */
-        private Duration leaseDuration = Duration.ofMinutes(10);
+        private Duration leaseDuration = Duration.ofMinutes(15);
     }
 
     @Getter

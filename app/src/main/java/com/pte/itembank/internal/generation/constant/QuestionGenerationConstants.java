@@ -75,6 +75,8 @@ public final class QuestionGenerationConstants {
     /** Startup validation messages: never include configured values. */
     public static final String CONFIG_STUB_PROFILE_ONLY =
             "itembank.generation.stub may only be enabled with the test, local or local-schema profile.";
+    public static final String CONFIG_ALL_VOICES_DISABLED =
+            "itembank.generation.kokoro.voices-disabled switches every speech voice off; leave at least one enabled.";
     public static final String CONFIG_LLM_BASE_URL_REQUIRED = "itembank.generation.llm.base-url is required.";
     public static final String CONFIG_LLM_BASE_URL_INVALID =
             "itembank.generation.llm.base-url must be an https URL (http only for local profiles).";
@@ -143,6 +145,11 @@ public final class QuestionGenerationConstants {
     public static final String PROMPT_CONTENT_UNREADABLE = "A stored prompt could not be read as JSON.";
     public static final String PROMPT_NOT_FOUND = "AI_PROMPT_NOT_FOUND";
     public static final String PROMPT_NOT_FOUND_MESSAGE = "Prompt not found.";
+
+    /** How much of a saved question a batch's result card previews: the start of its prompt and of each option. */
+    public static final int BATCH_PREVIEW_PROMPT_CHARS = 280;
+    public static final int BATCH_PREVIEW_OPTION_CHARS = 80;
+    public static final int BATCH_PREVIEW_MAX_OPTIONS = 4;
 
     private QuestionGenerationConstants() {
     }

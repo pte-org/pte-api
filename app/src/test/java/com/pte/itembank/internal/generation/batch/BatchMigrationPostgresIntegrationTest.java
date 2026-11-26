@@ -80,6 +80,18 @@ class BatchMigrationPostgresIntegrationTest {
     }
 
     @Test
+    void severalChildrenOfOneBatchMayRunAtOnceButAStandaloneJobStaysAlone() throws SQLException {
+        UUID author = UUID.randomUUID();
+        UUID batchId = batch(author);
+        execute(child(author, batchId, 0, "RUNNING"));
+        execute(child(author, batchId, 1, "QUEUED"));
+        execute(job(author, "QUEUED", true));
+
+        assertThatThrownBy(() -> execute(job(author, "QUEUED", true))).isInstanceOf(SQLException.class)
+                .hasMessageContaining("uk_qgen_jobs_one_active_per_requester");
+    }
+
+    @Test
     void theBatchFieldsAreAllSetOrAllNull() throws SQLException {
         String partial = job(UUID.randomUUID(), "COMPLETED", true)
                 .replace("save_questions)", "save_questions, batch_seq)").replace("true)", "true, 0)");

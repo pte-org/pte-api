@@ -93,10 +93,25 @@ class GenerationBatchQueriesTest {
         QuestionGenerationJob second = child(batch, 1, JobStatus.PENDING, 1);
         QuestionGenerationJob third = child(batch, 2, JobStatus.PENDING, 1);
 
-        assertThat(jobs.promoteNext(batch.getId())).isEqualTo(1);
+        assertThat(jobs.promoteNext(batch.getId(), 1)).isEqualTo(1);
         assertThat(statusOf(second.getId())).isEqualTo(JobStatus.QUEUED);
         assertThat(statusOf(third.getId())).isEqualTo(JobStatus.PENDING);
         assertThat(statusOf(first.getId())).isEqualTo(JobStatus.COMPLETED);
+    }
+
+    @Test
+    void promoteNextQueuesUpToTheLimitInRunOrderAndCountsTheActiveChildren() {
+        QuestionGenerationBatch batch = batch(4);
+        child(batch, 0, JobStatus.QUEUED, 1);
+        QuestionGenerationJob second = child(batch, 1, JobStatus.PENDING, 1);
+        QuestionGenerationJob third = child(batch, 2, JobStatus.PENDING, 1);
+        QuestionGenerationJob fourth = child(batch, 3, JobStatus.PENDING, 1);
+
+        assertThat(jobs.promoteNext(batch.getId(), 2)).isEqualTo(2);
+        assertThat(statusOf(second.getId())).isEqualTo(JobStatus.QUEUED);
+        assertThat(statusOf(third.getId())).isEqualTo(JobStatus.QUEUED);
+        assertThat(statusOf(fourth.getId())).isEqualTo(JobStatus.PENDING);
+        assertThat(jobs.countByBatchIdAndStatusIn(batch.getId(), JobStatus.ACTIVE)).isEqualTo(3);
     }
 
     @Test

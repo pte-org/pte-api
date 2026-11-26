@@ -58,6 +58,15 @@ public interface QuestionRepository extends JpaRepository<Question, Long>, Quest
         return findPagePublicIdsByCefr(taskTypeKey, section, status, pool, query, publicIdQuery, null, pageable);
     }
 
+    /** Every live revision of one authored question with its options, newest revision first. */
+    @EntityGraph(attributePaths = "options")
+    @Query("""
+            SELECT DISTINCT q FROM Question q
+             WHERE q.deleted = false AND q.revisionGroupPublicId = :revisionGroupPublicId
+             ORDER BY q.revisionNumber DESC
+            """)
+    List<Question> findRevisionsWithOptions(@Param("revisionGroupPublicId") UUID revisionGroupPublicId);
+
     @EntityGraph(attributePaths = "options")
     @Query("SELECT DISTINCT q FROM Question q WHERE q.deleted = false AND q.publicId IN :publicIds")
     List<Question> findWithOptionsByPublicIdIn(@Param("publicIds") Collection<UUID> publicIds);

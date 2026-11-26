@@ -49,7 +49,8 @@ class BatchGenerationSettingsTest {
     void thePlatformSettingWinsOverTheDeploymentBatchCap() {
         BillingSettingsService settings = mock(BillingSettingsService.class);
         QuestionGenerationProperties properties = new QuestionGenerationProperties();
-        when(settings.questionGenerationLimit(QuestionGenerationLimit.ITEMS_PER_BATCH, 50)).thenReturn(80);
+        when(settings.questionGenerationLimit(QuestionGenerationLimit.ITEMS_PER_BATCH,
+                BatchGenerationConstants.DEFAULT_MAX_ITEMS_PER_BATCH)).thenReturn(80);
 
         assertThat(new GenerationLimits(settings, properties).maxItemsPerBatch()).isEqualTo(80);
     }
@@ -57,7 +58,7 @@ class BatchGenerationSettingsTest {
     @Test
     void theBatchSettingHasTheAgreedKeyAndRange() {
         assertThat(QuestionGenerationLimit.ITEMS_PER_BATCH.key()).isEqualTo("question_generation_max_items_per_batch");
-        assertThat(QuestionGenerationLimit.ITEMS_PER_BATCH.defaultValue()).isEqualTo(50);
+        assertThat(QuestionGenerationLimit.ITEMS_PER_BATCH.defaultValue()).isZero();
         assertThat(QuestionGenerationLimit.ITEMS_PER_BATCH.maximum())
                 .isEqualTo(BatchGenerationConstants.MAX_ITEMS_PER_BATCH_HARD_LIMIT);
     }

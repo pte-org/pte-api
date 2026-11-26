@@ -93,6 +93,12 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
     @Query("select j.batchId from " + JOB + " j where j.id = :id")
     List<Long> findBatchIdById(@Param("id") Long id);
 
+    /** Questions of the given task types that the jobs of one batch run before the job at {@code seq}. */
+    @Query("select coalesce(sum(j.requestedCount), 0) from " + JOB + " j where j.batchId = :batchId "
+            + "and j.batchSeq < :seq and j.taskTypeKey in :taskTypeKeys")
+    long sumRequestedCountBefore(@Param("batchId") Long batchId, @Param("seq") int seq,
+                                 @Param("taskTypeKeys") java.util.Collection<String> taskTypeKeys);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + JOB + " j set j.status = " + STATUS + ".RUNNING, j.workerId = :workerId, "
             + "j.leaseUntil = :leaseUntil, j.startedAt = coalesce(j.startedAt, :now) "
@@ -116,18 +122,20 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
     boolean existsByBatchIdAndStatusIn(Long batchId, Collection<JobStatus> statuses);
 
     /**
-     * Lets the next child of the batch run: the PENDING child with the lowest seq becomes QUEUED. Guarded on PENDING,
-     * so calling it twice for the same finished child promotes once per call at most and never a running child.
+     * Lets up to {@code limit} more children of the batch run: the PENDING children with the lowest seq become
+     * QUEUED. Guarded on PENDING, so a repeated call never promotes a child twice nor touches a running one.
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = """
             update question_generation_jobs set status = 'QUEUED'
-            where id = (select id from question_generation_jobs
-                        where batch_id = :batchId and status = 'PENDING' and deleted = false
-                        order by batch_seq limit 1)
+            where id in (select id from question_generation_jobs
+                         where batch_id = :batchId and status = 'PENDING' and deleted = false
+                         order by batch_seq limit :limit)
               and status = 'PENDING'
             """, nativeQuery = true)
-    int promoteNext(@Param("batchId") Long batchId);
+    int promoteNext(@Param("batchId") Long batchId, @Param("limit") int limit);
+
+    long countByBatchIdAndStatusIn(Long batchId, Collection<JobStatus> statuses);
 
     /** Closes the children nobody holds (waiting or queued). started_at stays null, so their quota is refunded. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)

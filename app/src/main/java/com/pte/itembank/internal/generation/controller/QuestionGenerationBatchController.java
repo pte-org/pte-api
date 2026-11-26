@@ -1,10 +1,12 @@
 package com.pte.itembank.internal.generation.controller;
 
 import com.pte.itembank.internal.generation.batch.BatchDraftDeletionService;
+import com.pte.itembank.internal.generation.batch.BatchQuestionsQueryService;
 import com.pte.itembank.internal.generation.batch.QuestionGenerationBatchQueryService;
 import com.pte.itembank.internal.generation.batch.QuestionGenerationBatchService;
 import com.pte.itembank.internal.generation.batch.dto.BatchDraftDeleteRequest;
 import com.pte.itembank.internal.generation.batch.dto.BatchDraftDeleteResponse;
+import com.pte.itembank.internal.generation.batch.dto.BatchQuestionResponse;
 import com.pte.itembank.internal.generation.batch.dto.GenerationBatchResponse;
 import com.pte.itembank.internal.generation.batch.dto.SubmitGenerationBatchRequest;
 import com.pte.shared.security.CurrentUser;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -36,13 +39,16 @@ public class QuestionGenerationBatchController {
     private final QuestionGenerationBatchService batchService;
     private final QuestionGenerationBatchQueryService queryService;
     private final BatchDraftDeletionService draftDeletion;
+    private final BatchQuestionsQueryService questionsQuery;
 
     public QuestionGenerationBatchController(QuestionGenerationBatchService batchService,
                                              QuestionGenerationBatchQueryService queryService,
-                                             BatchDraftDeletionService draftDeletion) {
+                                             BatchDraftDeletionService draftDeletion,
+                                             BatchQuestionsQueryService questionsQuery) {
         this.batchService = batchService;
         this.queryService = queryService;
         this.draftDeletion = draftDeletion;
+        this.questionsQuery = questionsQuery;
     }
 
     @PostMapping
@@ -54,6 +60,12 @@ public class QuestionGenerationBatchController {
     @GetMapping("/{publicId}")
     public ApiResponse<GenerationBatchResponse> get(@PathVariable UUID publicId) {
         return ApiResponse.success(queryService.get(publicId, currentUser()));
+    }
+
+    /** Every question slot of the batch, with a preview of each saved question, for its result cards. */
+    @GetMapping("/{publicId}/questions")
+    public ApiResponse<List<BatchQuestionResponse>> questions(@PathVariable UUID publicId) {
+        return ApiResponse.success(questionsQuery.list(publicId, currentUser()));
     }
 
     @GetMapping

@@ -4,6 +4,7 @@ import com.pte.itembank.ItembankService;
 import com.pte.itembank.dto.request.RejectQuestionRequest;
 import com.pte.itembank.dto.response.QuestionResponse;
 import com.pte.itembank.internal.service.QuestionDeletionService;
+import com.pte.itembank.internal.service.QuestionRevisionQuery;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.web.StatusEndpointHarness;
 import org.junit.jupiter.api.Test;
@@ -24,7 +25,8 @@ class QuestionStatusEndpointTest {
     private final CurrentUser author = StatusEndpointHarness.user("ACADEMIC_STAFF");
     private final CurrentUser manager = StatusEndpointHarness.user("PLATFORM_ADMIN");
     private final ItembankService service = mock(ItembankService.class);
-    private final QuestionController controller = new QuestionController(service, mock(QuestionDeletionService.class));
+    private final QuestionController controller = new QuestionController(service, mock(QuestionDeletionService.class),
+            mock(QuestionRevisionQuery.class));
 
     @Test
     void authorActionsMapToTheirServiceCalls() throws Exception {

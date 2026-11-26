@@ -8,6 +8,7 @@ import com.pte.itembank.ItembankService;
 import com.pte.itembank.internal.controller.QuestionController;
 import com.pte.itembank.internal.exception.QuestionNotFoundException;
 import com.pte.itembank.internal.service.QuestionDeletionService;
+import com.pte.itembank.internal.service.QuestionRevisionQuery;
 import com.pte.shared.exception.GlobalExceptionHandler;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.CurrentUserContext;
@@ -40,7 +41,8 @@ class DraftDeletionHttpContractTest {
         context = mockStatic(CurrentUserContext.class);
         context.when(CurrentUserContext::required).thenReturn(caller);
         mvc = MockMvcBuilders.standaloneSetup(new PlanController(plans),
-                        new QuestionController(mock(ItembankService.class), questions))
+                        new QuestionController(mock(ItembankService.class), questions,
+                                mock(QuestionRevisionQuery.class)))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
     }
 
