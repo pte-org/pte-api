@@ -65,6 +65,11 @@ class NineRouterLlmGatewayStreamTest {
         public void accept(String delta) {
             calls.add(delta);
         }
+
+        @Override
+        public void thinking(String delta) {
+            calls.add("thinking:" + delta);
+        }
     }
 
     private HttpServer server;
@@ -128,6 +133,26 @@ class NineRouterLlmGatewayStreamTest {
         assertThat(answer).isEqualTo("{\"topic\":\"Bees\"}");
         assertThat(sink.calls).containsExactly("begin", "{\"topic\":", "\"Bees\"}");
         assertThat(JSON.readTree(bodies.get(0)).path("stream").asBoolean()).isTrue();
+    }
+
+    @Test
+    void aReasoningModelsThoughtsGoToTheSinkButNotIntoTheAnswer() {
+        Reply reasoning = new Reply(200, "text/event-stream", """
+                data: {"choices":[{"delta":{"role":"assistant","content":"","reasoning":"Plan the chart."}}]}
+
+                data: {"choices":[{"delta":{"reasoning_content":" Five bars."}}]}
+
+                data: {"choices":[{"delta":{"content":"{\\"a\\":1}"}}]}
+
+                data: [DONE]
+
+                """);
+
+        String answer = gateway(reasoning).completeJson(LlmRole.GENERATOR, "system", "user");
+
+        assertThat(answer).isEqualTo("{\"a\":1}");
+        assertThat(sink.calls).containsExactly("begin", "thinking:Plan the chart.", "thinking: Five bars.",
+                "{\"a\":1}");
     }
 
     @Test

@@ -18,4 +18,11 @@ public interface TokenSink {
     void begin();
 
     void accept(String delta);
+
+    /**
+     * A piece of what the model thinks before (or while) it writes the answer, for a model that streams its reasoning.
+     * It is never part of the answer; by default nobody reads it.
+     */
+    default void thinking(String delta) {
+    }
 }

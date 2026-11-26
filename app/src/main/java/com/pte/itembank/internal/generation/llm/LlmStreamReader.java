@@ -8,17 +8,22 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /**
  * Reads an OpenAI-compatible streamed chat completion ({@code data: {...}} lines) and hands every piece of text to a
  * {@link TokenSink} as it arrives. A provider that ignores {@code stream=true} and answers with one JSON body is read
- * as well, and its whole answer goes to the sink in one piece. Never logs or quotes the text.
+ * as well, and its whole answer goes to the sink in one piece. A reasoning model's thoughts go to the sink apart from
+ * the answer and are not part of it. Never logs or quotes the text.
  */
 final class LlmStreamReader {
 
     private static final String DATA_PREFIX = "data:";
     private static final String DONE = "[DONE]";
     private static final String NEWLINE = "\n";
+    private static final String CONTENT = "content";
+    /** Where providers stream a reasoning model's thoughts: OpenRouter-style first, then DeepSeek-style. */
+    private static final List<String> REASONING_FIELDS = List.of("reasoning", "reasoning_content");
 
     /** The answer and the token counts the provider reported; -1 when it did not report one. */
     record Result(String content, long totalTokens, long promptTokens, long completionTokens) {
@@ -62,10 +67,15 @@ final class LlmStreamReader {
             if (chunk.has("error")) {
                 throw new LlmProviderException(LlmFailureType.UNAVAILABLE);
             }
-            JsonNode delta = chunk.path("choices").path(0).path("delta").path("content");
-            if (delta.isTextual() && !delta.asText().isEmpty()) {
-                content.append(delta.asText());
-                sink.accept(delta.asText());
+            JsonNode delta = chunk.path("choices").path(0).path("delta");
+            String thought = reasoning(delta);
+            if (!thought.isEmpty()) {
+                sink.thinking(thought);
+            }
+            JsonNode text = delta.path(CONTENT);
+            if (text.isTextual() && !text.asText().isEmpty()) {
+                content.append(text.asText());
+                sink.accept(text.asText());
             }
             if (chunk.path("usage").has("total_tokens")) {
                 usage = chunk.path("usage");
@@ -74,12 +84,22 @@ final class LlmStreamReader {
         return streamed ? Result.of(content.toString(), usage) : plainAnswer(plainBody.toString(), sink);
     }
 
+    private static String reasoning(JsonNode delta) {
+        for (String field : REASONING_FIELDS) {
+            JsonNode thought = delta.path(field);
+            if (thought.isTextual() && !thought.asText().isEmpty()) {
+                return thought.asText();
+            }
+        }
+        return "";
+    }
+
     private Result plainAnswer(String body, TokenSink sink) {
         if (body.isBlank()) {
             return Result.of("", jsonMapper.createObjectNode());
         }
         JsonNode root = parse(body);
-        JsonNode message = root.path("choices").path(0).path("message").path("content");
+        JsonNode message = root.path("choices").path(0).path("message").path(CONTENT);
         String text = message.isTextual() ? message.asText() : "";
         if (!text.isEmpty()) {
             sink.accept(text);

@@ -41,6 +41,12 @@ final class LiveJob {
         send(GenerationLiveConstants.EVENT_TOKEN, new LiveEvent.Token(index, agent.name(), delta));
     }
 
+    synchronized void thinking(int index, LlmRole agent, String delta, Instant now) {
+        item(index).think(agent, delta);
+        touch(now);
+        send(GenerationLiveConstants.EVENT_THINKING, new LiveEvent.Thinking(index, agent.name(), delta));
+    }
+
     synchronized void stage(int index, String stage, Instant now) {
         item(index).stage(stage);
         touch(now);

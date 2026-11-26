@@ -9,8 +9,12 @@ import java.util.UUID;
 /** The payloads of the live stream of a job; each record is the JSON data of one event. */
 public final class LiveEvent {
 
-    /** An agent's text of the current call and how many calls it made for the item so far. */
-    public record AgentText(int attempt, String text) {
+    /**
+     * An agent's text of the current call and how many calls it made for the item so far. {@code thinking} is the end
+     * of what a reasoning model thought in this call (at most GenerationLiveConstants.THINKING_TAIL_CHARS) and
+     * {@code thinkingChars} how much it thought in all; empty and 0 for a model that does not stream its reasoning.
+     */
+    public record AgentText(int attempt, String text, String thinking, int thinkingChars) {
     }
 
     /** {@code activeAgent} is the agent that started last: the writer rewrites a rejected draft while reviewing. */
@@ -50,6 +54,9 @@ public final class LiveEvent {
     }
 
     public record Token(int index, String agent, String delta) {
+    }
+
+    public record Thinking(int index, String agent, String delta) {
     }
 
     public record Stage(int index, String stage) {

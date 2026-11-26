@@ -9,6 +9,10 @@ public final class GenerationLiveConstants {
     public static final String EVENT_BEGIN = "begin";
     /** A piece of text an agent just wrote. */
     public static final String EVENT_TOKEN = "token";
+    /** A piece of what a reasoning model thinks before it writes; never part of the answer. */
+    public static final String EVENT_THINKING = "thinking";
+    /** How much of an agent's latest thoughts a snapshot carries: the end, which is what a late watcher shows. */
+    public static final int THINKING_TAIL_CHARS = 2000;
     public static final String EVENT_STAGE = "stage";
     public static final String EVENT_MEDIA = "media";
     /** The generator's draft of an item as the question form's fields. */

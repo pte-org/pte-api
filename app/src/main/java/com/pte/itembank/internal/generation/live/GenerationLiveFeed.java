@@ -37,6 +37,11 @@ public class GenerationLiveFeed {
             public void accept(String delta) {
                 job.token(index, agent, delta, registry.clock().instant());
             }
+
+            @Override
+            public void thinking(String delta) {
+                job.thinking(index, agent, delta, registry.clock().instant());
+            }
         };
     }
 

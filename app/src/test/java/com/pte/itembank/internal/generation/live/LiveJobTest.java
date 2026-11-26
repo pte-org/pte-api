@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.generation.live;
 
+import com.pte.itembank.internal.generation.constant.GenerationLiveConstants;
 import com.pte.itembank.internal.generation.llm.LlmRole;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -84,6 +85,39 @@ class LiveJobTest {
         job.attach(late);
 
         assertThat(late.events.get(0)).contains("attempt=2, text=PASS").doesNotContain("FAIL");
+    }
+
+    @Test
+    void thoughtsAreSentApartFromTheTextAndALateWatcherGetsTheirEndAndSize() {
+        LiveJob job = new LiveJob(T0);
+        RecordingEmitter watcher = new RecordingEmitter();
+        job.attach(watcher);
+        job.begin(0, LlmRole.GENERATOR, T0);
+        String longThought = "x".repeat(GenerationLiveConstants.THINKING_TAIL_CHARS * 3);
+        job.thinking(0, LlmRole.GENERATOR, longThought, T0);
+        job.thinking(0, LlmRole.GENERATOR, "Five bars.", T0);
+        RecordingEmitter late = new RecordingEmitter();
+
+        job.attach(late);
+
+        assertThat(watcher.saw("event:thinking")).isTrue();
+        String expectedTail = longThought.substring(longThought.length() - GenerationLiveConstants.THINKING_TAIL_CHARS
+                + "Five bars.".length()) + "Five bars.";
+        assertThat(late.events.get(0)).contains("text=, thinking=" + expectedTail + ", thinkingChars="
+                + (longThought.length() + "Five bars.".length()));
+    }
+
+    @Test
+    void aNewCallForgetsTheThoughtsOfTheLastOne() {
+        LiveJob job = new LiveJob(T0);
+        job.begin(0, LlmRole.REVIEWER, T0);
+        job.thinking(0, LlmRole.REVIEWER, "old plan", T0);
+        job.begin(0, LlmRole.REVIEWER, T0);
+        RecordingEmitter late = new RecordingEmitter();
+
+        job.attach(late);
+
+        assertThat(late.events.get(0)).contains("thinking=, thinkingChars=0").doesNotContain("old plan");
     }
 
     @Test
