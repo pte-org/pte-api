@@ -144,6 +144,11 @@ public final class QuestionGenerationConstants {
     public static final String PROMPT_NOT_FOUND = "AI_PROMPT_NOT_FOUND";
     public static final String PROMPT_NOT_FOUND_MESSAGE = "Prompt not found.";
 
+    /** How much of a saved question a batch's result card previews: the start of its prompt and of each option. */
+    public static final int BATCH_PREVIEW_PROMPT_CHARS = 280;
+    public static final int BATCH_PREVIEW_OPTION_CHARS = 80;
+    public static final int BATCH_PREVIEW_MAX_OPTIONS = 4;
+
     private QuestionGenerationConstants() {
     }
 }

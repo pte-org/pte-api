@@ -2,10 +2,12 @@ package com.pte.itembank.internal.generation.controller;
 
 import com.pte.itembank.domain.enums.CefrLevel;
 import com.pte.itembank.internal.generation.batch.BatchDraftDeletionService;
+import com.pte.itembank.internal.generation.batch.BatchQuestionsQueryService;
 import com.pte.itembank.internal.generation.batch.QuestionGenerationBatchQueryService;
 import com.pte.itembank.internal.generation.batch.QuestionGenerationBatchService;
 import com.pte.itembank.internal.generation.batch.dto.BatchDraftDeleteResponse;
 import com.pte.itembank.internal.generation.batch.dto.GenerationBatchChildResponse;
+import com.pte.itembank.internal.generation.batch.dto.BatchQuestionResponse;
 import com.pte.itembank.internal.generation.batch.dto.GenerationBatchResponse;
 import com.pte.itembank.internal.generation.domain.BatchRow;
 import com.pte.itembank.internal.generation.domain.ImageKind;
@@ -53,6 +55,7 @@ class QuestionGenerationBatchControllerTest {
     private final QuestionGenerationBatchService batchService = mock(QuestionGenerationBatchService.class);
     private final QuestionGenerationBatchQueryService queryService = mock(QuestionGenerationBatchQueryService.class);
     private final BatchDraftDeletionService draftDeletion = mock(BatchDraftDeletionService.class);
+    private final BatchQuestionsQueryService questionsQuery = mock(BatchQuestionsQueryService.class);
     private final CurrentUser staff = new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_STAFF"));
     private MockedStatic<CurrentUserContext> context;
     private MockMvc mvc;
@@ -62,7 +65,7 @@ class QuestionGenerationBatchControllerTest {
         context = Mockito.mockStatic(CurrentUserContext.class);
         context.when(CurrentUserContext::required).thenReturn(staff);
         mvc = MockMvcBuilders.standaloneSetup(new QuestionGenerationBatchController(batchService, queryService,
-                        draftDeletion))
+                        draftDeletion, questionsQuery))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -79,6 +82,21 @@ class QuestionGenerationBatchControllerTest {
                 List.of(new BatchRow("READ_ALOUD", CefrLevel.B2, 25, List.of("climate"), ImageKind.AUTO)),
                 List.of(new GenerationBatchChildResponse(child, 0, 0, "READ_ALOUD", "climate", 10, "QUEUED", 0, 0,
                         null, null, null)));
+    }
+
+    @Test
+    void questionsListsEverySlotWithItsPreview() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(questionsQuery.list(id, staff)).thenReturn(List.of(new BatchQuestionResponse(UUID.randomUUID(), 0, 0,
+                "READ_ALOUD", "B2", "SAVED", null, UUID.randomUUID(), "SPEAKING", "Bees", "The city council",
+                List.of(), null, null, null, null, null, null, 48, 6, 6)));
+
+        mvc.perform(get(BASE + "/" + id + "/questions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].stage").value("SAVED"))
+                .andExpect(jsonPath("$.data[0].promptExcerpt").value("The city council"))
+                .andExpect(jsonPath("$.data[0].reviewPassed").value(6))
+                .andExpect(jsonPath("$.data[0].reviewTotal").value(6));
     }
 
     @Test

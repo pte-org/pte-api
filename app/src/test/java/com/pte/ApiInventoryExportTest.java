@@ -73,6 +73,7 @@ class ApiInventoryExportTest {
                         "GET /api/v1/question-generation/presets",
                         "POST /api/v1/question-generation/batches", "GET /api/v1/question-generation/batches",
                         "GET /api/v1/question-generation/batches/{publicId}",
+                        "GET /api/v1/question-generation/batches/{publicId}/questions",
                         "POST /api/v1/question-generation/batches/{publicId}/cancel",
                         "POST /api/v1/question-generation/batches/{publicId}/drafts/delete");
         assertThat(endpoints).filteredOn(endpoint -> String.valueOf(endpoint.get("path"))
