@@ -93,6 +93,12 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
     @Query("select j.batchId from " + JOB + " j where j.id = :id")
     List<Long> findBatchIdById(@Param("id") Long id);
 
+    /** Questions of the given task types that the jobs of one batch run before the job at {@code seq}. */
+    @Query("select coalesce(sum(j.requestedCount), 0) from " + JOB + " j where j.batchId = :batchId "
+            + "and j.batchSeq < :seq and j.taskTypeKey in :taskTypeKeys")
+    long sumRequestedCountBefore(@Param("batchId") Long batchId, @Param("seq") int seq,
+                                 @Param("taskTypeKeys") java.util.Collection<String> taskTypeKeys);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + JOB + " j set j.status = " + STATUS + ".RUNNING, j.workerId = :workerId, "
             + "j.leaseUntil = :leaseUntil, j.startedAt = coalesce(j.startedAt, :now) "

@@ -164,7 +164,7 @@ public class GenerationPipeline {
                 Optional<RenderedMedia> media;
                 try {
                     media = mediaRenderer.render(item.draft(), claim.taskTypeKey(), index,
-                            claim.jobPublicId().getLeastSignificantBits(), caller, claim.pool());
+                            claim.jobPublicId().getLeastSignificantBits(), caller, claim.pool(), claim.batchPosition());
                 } catch (GenerationMediaException mediaFailure) {
                     if (request.isPicture() && QuestionGenerationConstants.GENERATION_IMAGE_FAILED
                             .equals(mediaFailure.getCode()) && images.fallsBackToChart()

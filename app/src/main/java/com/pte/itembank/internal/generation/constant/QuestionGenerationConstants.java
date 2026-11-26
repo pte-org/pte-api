@@ -75,6 +75,8 @@ public final class QuestionGenerationConstants {
     /** Startup validation messages: never include configured values. */
     public static final String CONFIG_STUB_PROFILE_ONLY =
             "itembank.generation.stub may only be enabled with the test, local or local-schema profile.";
+    public static final String CONFIG_ALL_VOICES_DISABLED =
+            "itembank.generation.kokoro.voices-disabled switches every speech voice off; leave at least one enabled.";
     public static final String CONFIG_LLM_BASE_URL_REQUIRED = "itembank.generation.llm.base-url is required.";
     public static final String CONFIG_LLM_BASE_URL_INVALID =
             "itembank.generation.llm.base-url must be an https URL (http only for local profiles).";

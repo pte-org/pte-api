@@ -1,27 +1,31 @@
 package com.pte.itembank.internal.generation.media;
 
-import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
+import java.util.SplittableRandom;
 
 /**
- * Selects voice identifiers for audio generation, alternating accents within a job.
- * Provides a stable seed-based picker for test reproducibility.
+ * Selects voice identifiers for audio generation: from the batch's shared sequence when the job belongs to a batch,
+ * otherwise on its own, alternating accents within the job. Seed-based, so a run can be reproduced.
  */
 @Component
 public class VoicePicker {
 
-    private final List<String> usVoices;
-    private final List<String> ukVoices;
+    private final EnabledVoices enabled;
+    private final VoiceAssigner assigner;
 
-    public VoicePicker(QuestionGenerationProperties properties) {
-        String usVoicesCsv = properties.getKokoro().getVoicesUs();
-        String ukVoicesCsv = properties.getKokoro().getVoicesUk();
-        this.usVoices = parseVoices(usVoicesCsv);
-        this.ukVoices = parseVoices(ukVoicesCsv);
+    public VoicePicker(EnabledVoices enabled, VoiceAssigner assigner) {
+        this.enabled = enabled;
+        this.assigner = assigner;
+    }
+
+    /**
+     * Pick a voice for an item of a batch: the batch's own sequence decides it, so the questions of one batch do not
+     * repeat each other's voice. A job outside any batch ({@code position} null) picks on its own, as before.
+     */
+    public String pick(int itemIndex, long seed, BatchPosition position) {
+        return position == null ? pick(itemIndex, seed) : assigner.assign(position.seed(), position.offset() + itemIndex);
     }
 
     /**
@@ -33,32 +37,16 @@ public class VoicePicker {
      * @return voice identifier (e.g., "af_heart")
      */
     public String pick(int itemIndex, long seed) {
-        Random random = new Random(seed + itemIndex);
-
-        // Alternate US/UK by item index (even = US, odd = UK)
-        List<String> voices = itemIndex % 2 == 0 ? usVoices : ukVoices;
+        // The seed picks the accent the job starts with: a batch runs one item per job, so alternating on the item
+        // index alone gave every batch question an American voice. SplittableRandom mixes nearby seeds well, which
+        // java.util.Random does not on its first draw.
+        boolean startsUk = new SplittableRandom(seed).nextBoolean();
+        boolean uk = startsUk ^ (itemIndex % 2 == 1);
+        List<KokoroVoiceCatalog.Voice> voices = enabled.of(uk ? KokoroVoiceCatalog.Accent.UK : KokoroVoiceCatalog.Accent.US);
         if (voices.isEmpty()) {
-            // Fallback if config is empty
-            return usVoices.isEmpty() ? "af_heart" : usVoices.get(0);
+            // The other accent: a deployment may switch one accent off entirely.
+            voices = enabled.of(uk ? KokoroVoiceCatalog.Accent.US : KokoroVoiceCatalog.Accent.UK);
         }
-
-        int voiceIndex = random.nextInt(voices.size());
-        return voices.get(voiceIndex);
-    }
-
-    /**
-     * Parse comma-separated voice list from config.
-     */
-    private List<String> parseVoices(String csv) {
-        List<String> result = new ArrayList<>();
-        if (csv != null && !csv.isBlank()) {
-            for (String voice : csv.split(",")) {
-                String trimmed = voice.trim();
-                if (!trimmed.isBlank()) {
-                    result.add(trimmed);
-                }
-            }
-        }
-        return result;
+        return voices.get(new SplittableRandom(seed + itemIndex).nextInt(voices.size())).code();
     }
 }

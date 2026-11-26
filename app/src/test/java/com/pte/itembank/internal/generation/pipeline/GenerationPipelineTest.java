@@ -101,7 +101,7 @@ class GenerationPipelineTest {
                 .thenReturn(new com.pte.itembank.internal.generation.review.ReviewVerdict("PASS", java.util.Map.of(), null));
         UUID image = UUID.randomUUID();
         byte[] png = {1, 2, 3};
-        when(mediaRenderer.render(any(), any(), any(Integer.class), any(Long.class), any(), any())).thenReturn(
+        when(mediaRenderer.render(any(), any(), any(Integer.class), any(Long.class), any(), any(), any())).thenReturn(
                 java.util.Optional.of(new com.pte.itembank.internal.generation.media.RenderedMedia(null, image,
                         java.util.Map.of(), png)));
         when(imageReviewer.review(chart, png)).thenReturn(
@@ -119,6 +119,30 @@ class GenerationPipelineTest {
                 "The legend is missing.", java.util.Map.of());
         verify(mediaRenderer, org.mockito.Mockito.times(2)).discard(null, image, admin);
         verify(itemState, never()).fail(any(), any(Integer.class), any(), any());
+    }
+
+    @Test
+    void theBatchPositionOfTheClaimReachesTheMediaRenderer() {
+        ready();
+        var chart = new com.pte.itembank.internal.generation.draft.ItemDraft.ChartDraft("Energy", "bar", "Use",
+                "Year", "TWh", "TWh", List.of("2020", "2021", "2022"), List.of(), List.of());
+        when(generator.generate(any(), any())).thenReturn(new GeneratedItem(mock(CreateQuestionRequest.class),
+                "stimulus", "topic", "llm", chart));
+        when(itemReviewer.review(any(GeneratedItem.class), any(), any(), any(), any()))
+                .thenReturn(new com.pte.itembank.internal.generation.review.ReviewVerdict("PASS", java.util.Map.of(), null));
+        when(mediaRenderer.render(any(), any(), any(Integer.class), any(Long.class), any(), any(), any()))
+                .thenReturn(java.util.Optional.empty());
+        when(writer.save(any(), any(), any(Integer.class), any(), any())).thenReturn(ItemOutcome.SAVED);
+        var position = new com.pte.itembank.internal.generation.media.BatchPosition(77L, 4);
+        JobClaim inBatch = new JobClaim(claim.jobId(), claim.jobPublicId(), claim.requesterId(), claim.taskTypeKey(),
+                claim.cefrLevel(), claim.pool(), claim.topicHint(), claim.workerId(), true,
+                com.pte.itembank.internal.generation.domain.ImageKind.AUTO, position);
+
+        when(itemState.advance(inBatch, 0, ItemStage.GENERATING)).thenReturn(true);
+
+        pipeline.runItem(inBatch, admin, 0, NO_RENEWAL);
+
+        verify(mediaRenderer).render(any(), any(), eq(0), any(Long.class), any(), any(), eq(position));
     }
 
     @Test
@@ -163,7 +187,7 @@ class GenerationPipelineTest {
                 "stimulus", "topic", "llm", chart));
         when(itemReviewer.review(any(GeneratedItem.class), any(), any(), any(), any()))
                 .thenReturn(new com.pte.itembank.internal.generation.review.ReviewVerdict("PASS", java.util.Map.of(), null));
-        when(mediaRenderer.render(any(), any(), any(Integer.class), any(Long.class), any(), any())).thenReturn(
+        when(mediaRenderer.render(any(), any(), any(Integer.class), any(Long.class), any(), any(), any())).thenReturn(
                 java.util.Optional.of(new com.pte.itembank.internal.generation.media.RenderedMedia(null,
                         UUID.randomUUID(), java.util.Map.of(), new byte[]{1})));
 
@@ -288,7 +312,7 @@ class GenerationPipelineTest {
                 .thenReturn(new com.pte.itembank.internal.generation.review.ReviewVerdict("PASS", java.util.Map.of(), null));
         var rendered = new com.pte.itembank.internal.generation.media.RenderedMedia(null, UUID.randomUUID(),
                 java.util.Map.of(), new byte[]{1});
-        when(mediaRenderer.render(any(), any(), any(Integer.class), any(Long.class), any(), any()))
+        when(mediaRenderer.render(any(), any(), any(Integer.class), any(Long.class), any(), any(), any()))
                 .thenReturn(java.util.Optional.of(rendered));
         org.mockito.Mockito.doThrow(new IllegalStateException("live view down")).when(liveFeed)
                 .media(any(), any(Integer.class), any(), any());
@@ -341,10 +365,10 @@ class GenerationPipelineTest {
         org.mockito.ArgumentCaptor<GenerationRequest> asked = org.mockito.ArgumentCaptor.forClass(GenerationRequest.class);
         when(generator.generate(asked.capture(), any())).thenReturn(pictureItem, chartItem);
         UUID image = UUID.randomUUID();
-        when(mediaRenderer.render(eq(pictureDraft), any(), any(Integer.class), any(Long.class), any(), any()))
+        when(mediaRenderer.render(eq(pictureDraft), any(), any(Integer.class), any(Long.class), any(), any(), any()))
                 .thenThrow(new com.pte.itembank.internal.generation.exception.GenerationMediaException(
                         QuestionGenerationConstants.GENERATION_IMAGE_FAILED, "UNAVAILABLE"));
-        when(mediaRenderer.render(eq(chartDraft), any(), any(Integer.class), any(Long.class), any(), any())).thenReturn(
+        when(mediaRenderer.render(eq(chartDraft), any(), any(Integer.class), any(Long.class), any(), any(), any())).thenReturn(
                 java.util.Optional.of(new com.pte.itembank.internal.generation.media.RenderedMedia(null, image,
                         java.util.Map.of())));
 
@@ -363,7 +387,7 @@ class GenerationPipelineTest {
                 "Recycling", "A flowchart of four recycling stages", List.of("a", "b", "c"), "Model answer.");
         when(generator.generate(any(), any())).thenReturn(
                 new GeneratedItem(mock(CreateQuestionRequest.class), "s", "t", "llm", pictureDraft));
-        when(mediaRenderer.render(any(), any(), any(Integer.class), any(Long.class), any(), any())).thenReturn(
+        when(mediaRenderer.render(any(), any(), any(Integer.class), any(Long.class), any(), any(), any())).thenReturn(
                 java.util.Optional.of(new com.pte.itembank.internal.generation.media.RenderedMedia(null,
                         UUID.randomUUID(), java.util.Map.of())));
 
@@ -381,7 +405,7 @@ class GenerationPipelineTest {
                 "Recycling", "A flowchart of four recycling stages", List.of("a", "b", "c"), "Model answer.");
         when(generator.generate(any(), any())).thenReturn(
                 new GeneratedItem(mock(CreateQuestionRequest.class), "s", "t", "llm", pictureDraft));
-        when(mediaRenderer.render(any(), any(), any(Integer.class), any(Long.class), any(), any()))
+        when(mediaRenderer.render(any(), any(), any(Integer.class), any(Long.class), any(), any(), any()))
                 .thenThrow(new com.pte.itembank.internal.generation.exception.GenerationMediaException(
                         QuestionGenerationConstants.GENERATION_IMAGE_FAILED, "UNAVAILABLE"));
 
