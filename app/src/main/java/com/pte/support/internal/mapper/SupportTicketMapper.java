@@ -14,16 +14,18 @@ public final class SupportTicketMapper {
     private SupportTicketMapper() {
     }
 
-    public static SupportTicketResponse toResponse(SupportTicket ticket, List<SupportTicketNote> notes) {
-        return toResponse(ticket, notes, null);
+    public static SupportTicketResponse toResponse(SupportTicket ticket, List<SupportTicketNote> notes,
+            String submitterName) {
+        return toResponse(ticket, notes, submitterName, null);
     }
 
     public static SupportTicketResponse toResponse(SupportTicket ticket, List<SupportTicketNote> notes,
-            TicketEntityContext entityContext) {
+            String submitterName, TicketEntityContext entityContext) {
         return new SupportTicketResponse(
                 ticket.getPublicId(),
                 ticket.getTenantId(),
                 ticket.getSubmitterUserPublicId(),
+                submitterName,
                 ticket.getCategory(),
                 ticket.getDescription(),
                 ticket.getStatus(),

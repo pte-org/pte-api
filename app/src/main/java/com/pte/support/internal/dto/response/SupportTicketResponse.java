@@ -12,6 +12,8 @@ public record SupportTicketResponse(
         UUID publicId,
         UUID tenantId,
         UUID submitterUserPublicId,
+        /** Display name of the submitter, or null when the account no longer exists. */
+        String submitterName,
         TicketCategory category,
         String description,
         TicketStatus status,

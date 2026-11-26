@@ -18,13 +18,13 @@ public record UpdateProgramRequest(
 
     /**
      * Rejected by Bean Validation when both dates are present and endDate
-     * is not strictly after startDate.
+     * is before startDate (same-day start/end is allowed).
      */
     @AssertTrue(message = EnrollmentConstants.PROGRAM_END_DATE_BEFORE_START_DATE)
     public boolean isEndDateAfterStartDate() {
         if (startDate == null || endDate == null) {
             return true;
         }
-        return endDate.isAfter(startDate);
+        return !endDate.isBefore(startDate);
     }
 }

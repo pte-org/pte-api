@@ -122,6 +122,7 @@ services:
       MAIL_FROM: ${MAIL_FROM:-no-reply@pteprep.local}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL:-support@pteprep.local}
       APP_WEB_TENANT_URL: ${APP_WEB_TENANT_URL:-http://localhost:3000}
+      APP_WEB_PRACTICE_URL: ${APP_WEB_PRACTICE_URL:-http://localhost:3014}
       MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-false}
       MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-false}
       MAIL_SMTP_STARTTLS_REQUIRED: ${MAIL_SMTP_STARTTLS_REQUIRED:-false}

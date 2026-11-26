@@ -19,9 +19,10 @@ public record CreateProgramRequest(
 
     /**
      * Rejected by Bean Validation when both dates are present and endDate
-     * is not strictly after startDate. Named {@code isEndDateAfterStartDate}
-     * so the JSON field key in the validation error response is
-     * {@code endDateAfterStartDate} (standard Jakarta prefix stripping).
+     * is before startDate (same-day start/end is allowed). Named
+     * {@code isEndDateAfterStartDate} so the JSON field key in the validation
+     * error response stays {@code endDateAfterStartDate} (standard Jakarta
+     * prefix stripping).
      */
     @AssertTrue(message = EnrollmentConstants.PROGRAM_END_DATE_BEFORE_START_DATE)
     public boolean isEndDateAfterStartDate() {
@@ -30,6 +31,6 @@ public record CreateProgramRequest(
             // nullability is intentionally allowed (dates are optional).
             return true;
         }
-        return endDate.isAfter(startDate);
+        return !endDate.isBefore(startDate);
     }
 }

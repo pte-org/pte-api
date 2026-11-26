@@ -1,5 +1,6 @@
 package com.pte.support.internal.service;
 
+import com.pte.identity.IdentityService;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.PlatformOperation;
@@ -49,16 +50,19 @@ public class SupportTicketService {
     private final EntityReferenceValidator entityReferenceValidator;
     private final AuditLogService auditLogService;
     private final ApplicationEventPublisher eventPublisher;
+    private final IdentityService identityService;
 
     public SupportTicketService(SupportTicketRepository ticketRepository,
             SupportTicketNoteRepository noteRepository,
             EntityReferenceValidator entityReferenceValidator,
-            AuditLogService auditLogService, ApplicationEventPublisher eventPublisher) {
+            AuditLogService auditLogService, ApplicationEventPublisher eventPublisher,
+            IdentityService identityService) {
         this.ticketRepository = ticketRepository;
         this.noteRepository = noteRepository;
         this.entityReferenceValidator = entityReferenceValidator;
         this.auditLogService = auditLogService;
         this.eventPublisher = eventPublisher;
+        this.identityService = identityService;
     }
 
     @Transactional
@@ -215,7 +219,11 @@ public class SupportTicketService {
 
     private SupportTicketResponse detailResponse(SupportTicket ticket, List<SupportTicketNote> notes,
             CurrentUser caller) {
-        return SupportTicketMapper.toResponse(ticket, notes,
+        UUID submitterId = ticket.getSubmitterUserPublicId();
+        // The submitter's display name is only known to the identity module.
+        String submitterName = submitterId == null ? null
+                : identityService.findFullNames(ticket.getTenantId(), List.of(submitterId)).get(submitterId);
+        return SupportTicketMapper.toResponse(ticket, notes, submitterName,
                 entityReferenceValidator.describe(ticket.getEntityType(), ticket.getEntityId(), caller));
     }
 
