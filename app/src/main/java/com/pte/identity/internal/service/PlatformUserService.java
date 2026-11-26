@@ -89,9 +89,10 @@ public class PlatformUserService {
                 saved.getPublicId().toString(), IdentityConstants.PLATFORM_USER_CREATED,
                 IdentityConstants.PLATFORM_USER_CREATED_SUMMARY);
         if (generatedPassword) {
+            String roleLabel = roles.stream().findFirst().map(Role::displayLabel).orElse(null);
             eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(
                     UUID.randomUUID(), saved.getPublicId(), null, saved.getUsername(),
-                    saved.getEmail(), saved.getFullName(), password));
+                    saved.getEmail(), saved.getFullName(), password, roleLabel, true));
         }
         return UserMapper.toResponse(saved);
     }
@@ -142,7 +143,7 @@ public class PlatformUserService {
             throw new AccessDeniedException(SharedConstants.ACCESS_DENIED);
         }
         return userRepository.findPlatformDirectory(provisioningHelper.platformRoleValues()).stream()
-                .map(user -> new UserDirectoryEntryResponse(user.getPublicId(), user.getFullName()))
+                .map(UserDirectoryEntryResponse::from)
                 .toList();
     }
 

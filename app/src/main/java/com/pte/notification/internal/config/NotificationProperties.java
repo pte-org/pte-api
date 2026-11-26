@@ -24,9 +24,25 @@ public class NotificationProperties {
         this.supportEmail = supportEmail;
     }
 
+    /** Time zone the exam times in emails are written in (students are told which one it is). */
+    @NotBlank
+    private String displayZone = "Asia/Ho_Chi_Minh";
+
+    public String getDisplayZone() {
+        return displayZone;
+    }
+
+    public void setDisplayZone(String displayZone) {
+        this.displayZone = displayZone;
+    }
+
     /** Base URL of the tenant web app; the approval and rejection emails link to its /login and /register pages. */
     @NotBlank
     private String tenantWebUrl = "http://localhost:3000";
+
+    /** Base URL of the student practice web app; student welcome/credential emails link to its /sign-in page. */
+    @NotBlank
+    private String practiceWebUrl = "http://localhost:3014";
 
     public String getTenantWebUrl() {
         return tenantWebUrl;
@@ -36,9 +52,22 @@ public class NotificationProperties {
         this.tenantWebUrl = tenantWebUrl;
     }
 
-    /** Sign-in page linked from the approval email. */
+    public String getPracticeWebUrl() {
+        return practiceWebUrl;
+    }
+
+    public void setPracticeWebUrl(String practiceWebUrl) {
+        this.practiceWebUrl = practiceWebUrl;
+    }
+
+    /** Sign-in page linked from the approval and staff credential emails. */
     public String getLoginUrl() {
         return stripTrailingSlash(tenantWebUrl) + "/login";
+    }
+
+    /** Sign-in page linked from student welcome and credential emails. */
+    public String getPracticeLoginUrl() {
+        return stripTrailingSlash(practiceWebUrl) + "/sign-in";
     }
 
     /** Registration page linked from the rejection email, so an applicant can submit again. */

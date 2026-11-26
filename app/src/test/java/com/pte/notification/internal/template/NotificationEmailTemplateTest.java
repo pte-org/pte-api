@@ -12,14 +12,6 @@ class NotificationEmailTemplateTest {
     private static final String HOSTILE = "<script>alert(1)</script>";
 
     @Test
-    void studentEnrolled_showsTheSessionInASelectableBlock() {
-        String html = NotificationEmailTemplate.studentEnrolled("0b8f2c3e-6d4a", 2026);
-
-        assertThat(html).contains("You&#39;re enrolled in an exam session", "0b8f2c3e-6d4a", "user-select:all",
-                "src=\"cid:pte-logo\"", "© 2026 PTE Prep");
-    }
-
-    @Test
     void attemptPublished_listsEveryScore_andNeverShowsMissingDataAsZero() {
         String html = NotificationEmailTemplate.attemptPublished("Nguyen Van A", 72, 70, null, 68, 74, 2026);
 
@@ -71,7 +63,6 @@ class NotificationEmailTemplateTest {
     @Test
     void everyCard_isSelfContained() {
         List<String> cards = List.of(
-                NotificationEmailTemplate.studentEnrolled("s", 2026),
                 NotificationEmailTemplate.attemptPublished("n", 1, 2, 3, 4, 5, 2026),
                 NotificationEmailTemplate.violationFlagged("OTHER", "a", "s", "d", 2026),
                 NotificationEmailTemplate.sessionCancelled("n", "t", 2026),

@@ -25,13 +25,6 @@ public final class NotificationEmailTemplate {
     private NotificationEmailTemplate() {
     }
 
-    public static String studentEnrolled(String sessionId, int year) {
-        String title = "You're enrolled in an exam session";
-        return page(title, heading(title)
-                + paragraph(BODY, "Log in to view your schedule.")
-                + fields(new String[][] {{"Session", sessionId}}), year);
-    }
-
     /** A null score is shown as "Not enough data", as in the plain-text mail. */
     public static String attemptPublished(String fullName, Integer overall, Integer listening, Integer reading,
             Integer speaking, Integer writing, int year) {

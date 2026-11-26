@@ -67,21 +67,112 @@ public final class BrandedEmailTemplate {
 
     public static RenderedEmail temporaryCredentials(String fullName, String username, String temporaryPassword,
             int year) {
-        String subject = BRAND + " - Your temporary login";
+        return temporaryCredentials(fullName, null, null, username, temporaryPassword, null, true, year);
+    }
+
+    /**
+     * Credentials card shared by both new-account welcome emails ({@code newAccount = true}) and admin-issued
+     * temporary password resets ({@code newAccount = false}). Dynamic title and intro distinguish the two flows while
+     * keeping the summary card, sign-in button, fallback link, and amber callout uniform.
+     */
+    public static RenderedEmail temporaryCredentials(String fullName, String organizationName, String roleLabel,
+            String username, String temporaryPassword, String loginUrl, boolean newAccount, int year) {
         boolean named = fullName != null && !fullName.isBlank();
-        String rows = heading(named ? "Hello " + escape(fullName) + "," : "Hello,")
-                + paragraph(BODY, "A temporary password was set for your " + BRAND + " account. Sign in with the"
-                        + " details below and <strong>change it right away</strong>.")
-                + fields(new String[][] {{"Username", username}, {"Temporary password", temporaryPassword}})
-                + paragraph(MUTED, "Did not expect this? Contact your center or administrator.");
+        boolean hasOrg = organizationName != null && !organizationName.isBlank();
+        boolean hasRole = roleLabel != null && !roleLabel.isBlank();
+        boolean hasLoginUrl = loginUrl != null && !loginUrl.isBlank();
 
-        String text = BRAND + "\n\n"
-                + (named ? "Hello " + fullName + ",\n" : "Hello,\n")
-                + "A temporary password was set for your " + BRAND + " account. Sign in and change it right away.\n\n"
-                + "Username: " + username + "\n"
-                + "Temporary password: " + temporaryPassword + "\n";
+        boolean isStudent = "Student".equalsIgnoreCase(roleLabel);
+        String title = newAccount ? "Welcome to " + BRAND : "Your temporary password";
+        String subject = "[" + BRAND + "] " + (newAccount ? "Welcome to " + BRAND : "Your temporary password")
+                + (hasOrg ? " - " + singleLine(organizationName) : "");
+        String greeting = named ? "Hi " + escape(fullName) + "," : "Hi,";
+        String plainGreeting = named ? "Hi " + fullName + "," : "Hi,";
 
-        return new RenderedEmail(subject, text, page("Your temporary login", rows, year));
+        String introHtml;
+        String introText;
+        if (newAccount) {
+            if (isStudent) {
+                introHtml = hasOrg
+                        ? "Your account for <strong>" + escape(organizationName)
+                                + "</strong> is ready. Use the details below to sign in to " + BRAND
+                                + " Practice or the exam app."
+                        : "Your " + BRAND + " student account is ready. Use the details below to sign in to " + BRAND
+                                + " Practice or the exam app.";
+                introText = hasOrg
+                        ? "Your account for " + organizationName + " is ready. Use the details below to sign in to "
+                                + BRAND + " Practice or the exam app."
+                        : "Your " + BRAND + " student account is ready. Use the details below to sign in to " + BRAND
+                                + " Practice or the exam app.";
+            } else {
+                introHtml = hasOrg
+                        ? "Your account for <strong>" + escape(organizationName)
+                                + "</strong> is ready. Use the details below to sign in to " + BRAND + "."
+                        : "Your " + BRAND + " account is ready. Use the details below to sign in.";
+                introText = hasOrg
+                        ? "Your account for " + organizationName + " is ready. Use the details below to sign in to "
+                                + BRAND + "."
+                        : "Your " + BRAND + " account is ready. Use the details below to sign in.";
+            }
+        } else {
+            introHtml = hasOrg
+                    ? "A temporary password was set for your <strong>" + escape(organizationName)
+                            + "</strong> account on " + BRAND + ". Use the details below to sign in."
+                    : "A temporary password was set for your " + BRAND
+                            + " account. Use the details below to sign in.";
+            introText = hasOrg
+                    ? "A temporary password was set for your " + organizationName + " account on " + BRAND
+                            + ". Use the details below to sign in."
+                    : "A temporary password was set for your " + BRAND
+                            + " account. Use the details below to sign in.";
+        }
+
+        String ctaLabel = isStudent ? "Sign in to " + BRAND + " Practice" : "Sign in to " + BRAND;
+
+        java.util.ArrayList<String[]> summaryRows = new java.util.ArrayList<>();
+        if (hasOrg) {
+            summaryRows.add(new String[] {"Organization", organizationName, "text"});
+        }
+        if (hasRole) {
+            summaryRows.add(new String[] {"Role", roleLabel, "badge-info"});
+        }
+        summaryRows.add(new String[] {"Username", username, "mono"});
+        summaryRows.add(new String[] {"Temporary password", temporaryPassword, "mono"});
+
+        StringBuilder rows = new StringBuilder()
+                .append(heading(title))
+                .append(paragraph(BODY, greeting))
+                .append(paragraph(BODY, introHtml))
+                .append(summary(summaryRows.toArray(String[][]::new)));
+        if (hasLoginUrl) {
+            rows.append(button(loginUrl, ctaLabel))
+                    .append(linkHint("Button not working? Copy this link into your browser:", loginUrl));
+        }
+        rows.append(callout("<strong>Keep this password private.</strong> It is temporary: you will be asked to"
+                        + " choose a new one the first time you sign in."))
+                .append(paragraph(MUTED, "Did not expect this? Contact your center or administrator."))
+                .append(paragraph(BODY, "Warm regards,<br>The " + BRAND + " team"));
+
+        StringBuilder text = new StringBuilder(BRAND).append("\n\n").append(title).append("\n\n")
+                .append(plainGreeting).append("\n\n")
+                .append(introText).append("\n\n");
+        if (hasOrg) {
+            text.append("Organization: ").append(organizationName).append('\n');
+        }
+        if (hasRole) {
+            text.append("Role: ").append(roleLabel).append('\n');
+        }
+        text.append("Username: ").append(username).append('\n')
+                .append("Temporary password: ").append(temporaryPassword).append("\n\n");
+        if (hasLoginUrl) {
+            text.append("Sign in: ").append(loginUrl).append("\n\n");
+        }
+        text.append("Keep this password private. It is temporary: you will be asked to choose a new one the first")
+                .append(" time you sign in.\n\n")
+                .append("Did not expect this? Contact your center or administrator.\n\n")
+                .append("Warm regards,\nThe ").append(BRAND).append(" team\n");
+
+        return new RenderedEmail(subject, text.toString(), page(title, rows.toString(), year));
     }
 
     /**
