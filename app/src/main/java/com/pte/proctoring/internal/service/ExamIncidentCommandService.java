@@ -67,6 +67,10 @@ public class ExamIncidentCommandService {
             CreateIncidentRequest request,
             CurrentUser caller) {
         IncidentAccessContext access = accessPolicy.authorize(sessionPublicId, caller);
+        // New reports describe what is happening in the room, so they end with the session for every caller.
+        if (sessionService.isSessionClosed(sessionPublicId, access.tenantId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ExamIncidentConstants.SESSION_CLOSED);
+        }
         validateCreateTarget(sessionPublicId, request, access.tenantId());
 
         ExamIncident incident = new ExamIncident();
