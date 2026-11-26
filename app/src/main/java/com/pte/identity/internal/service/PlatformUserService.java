@@ -143,7 +143,7 @@ public class PlatformUserService {
             throw new AccessDeniedException(SharedConstants.ACCESS_DENIED);
         }
         return userRepository.findPlatformDirectory(provisioningHelper.platformRoleValues()).stream()
-                .map(user -> new UserDirectoryEntryResponse(user.getPublicId(), user.getFullName()))
+                .map(UserDirectoryEntryResponse::from)
                 .toList();
     }
 
