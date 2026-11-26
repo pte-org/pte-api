@@ -65,14 +65,6 @@ public class SupportTicketService {
         this.identityService = identityService;
     }
 
-    /** The response with the submitter's display name, which only the identity module can resolve. */
-    private SupportTicketResponse toResponse(SupportTicket ticket, List<SupportTicketNote> notes) {
-        UUID submitterId = ticket.getSubmitterUserPublicId();
-        String submitterName = submitterId == null ? null
-                : identityService.findFullNames(ticket.getTenantId(), List.of(submitterId)).get(submitterId);
-        return SupportTicketMapper.toResponse(ticket, notes, submitterName);
-    }
-
     @Transactional
     public SupportTicketResponse submit(SubmitTicketRequest request, CurrentUser caller) {
         entityReferenceValidator.validate(request.entityType(), request.entityId(), caller);
@@ -91,7 +83,7 @@ public class SupportTicketService {
         auditLogService.record(caller, SupportConstants.AGGREGATE_SUPPORT_TICKET,
                 saved.getPublicId().toString(), SupportConstants.EVENT_TICKET_SUBMITTED,
                 "Submitted ticket [" + saved.getCategory() + "]");
-        return toResponse(saved, List.of());
+        return detailResponse(saved, List.of(), caller);
     }
 
     @Transactional(readOnly = true)
@@ -123,7 +115,7 @@ public class SupportTicketService {
         SupportTicket ticket = ticketRepository.findByPublicIdAndTenantId(publicId, caller.tenantId())
                 .orElseThrow(SupportTicketNotFoundException::new);
         List<SupportTicketNote> notes = noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId());
-        return toResponse(ticket, notes);
+        return detailResponse(ticket, notes, caller);
     }
 
     @Transactional
@@ -135,7 +127,7 @@ public class SupportTicketService {
                 ticket.getPublicId().toString(), SupportConstants.EVENT_TICKET_CLOSED,
                 "Host closed ticket");
         List<SupportTicketNote> notes = noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId());
-        return toResponse(ticket, notes);
+        return detailResponse(ticket, notes, caller);
     }
 
     @Transactional
@@ -157,7 +149,7 @@ public class SupportTicketService {
                 ticket.getPublicId().toString(), SupportConstants.EVENT_TICKET_STATUS_UPDATED,
                 "Status updated to " + request.status());
         List<SupportTicketNote> notes = noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId());
-        return toResponse(ticket, notes);
+        return detailResponse(ticket, notes, caller);
     }
 
     @Transactional
@@ -177,7 +169,7 @@ public class SupportTicketService {
                 ticket.getPublicId().toString(), SupportConstants.EVENT_TICKET_NOTE_ADDED,
                 "Admin added note");
         List<SupportTicketNote> notes = noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId());
-        return toResponse(ticket, notes);
+        return detailResponse(ticket, notes, caller);
     }
 
     @Transactional(readOnly = true)
@@ -222,7 +214,17 @@ public class SupportTicketService {
         SupportTicket ticket = ticketRepository.findByPublicId(publicId)
                 .orElseThrow(SupportTicketNotFoundException::new);
         List<SupportTicketNote> notes = noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId());
-        return toResponse(ticket, notes);
+        return detailResponse(ticket, notes, caller);
+    }
+
+    private SupportTicketResponse detailResponse(SupportTicket ticket, List<SupportTicketNote> notes,
+            CurrentUser caller) {
+        UUID submitterId = ticket.getSubmitterUserPublicId();
+        // The submitter's display name is only known to the identity module.
+        String submitterName = submitterId == null ? null
+                : identityService.findFullNames(ticket.getTenantId(), List.of(submitterId)).get(submitterId);
+        return SupportTicketMapper.toResponse(ticket, notes, submitterName,
+                entityReferenceValidator.describe(ticket.getEntityType(), ticket.getEntityId(), caller));
     }
 
     private static Specification<SupportTicket> byTenant(UUID tenantId) {

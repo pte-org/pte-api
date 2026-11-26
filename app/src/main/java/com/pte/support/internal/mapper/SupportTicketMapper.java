@@ -5,6 +5,7 @@ import com.pte.support.domain.SupportTicketNote;
 import com.pte.support.internal.dto.response.SupportTicketNoteResponse;
 import com.pte.support.internal.dto.response.SupportTicketResponse;
 import com.pte.support.internal.dto.response.SupportTicketSummaryResponse;
+import com.pte.support.internal.dto.response.TicketEntityContext;
 
 import java.util.List;
 
@@ -15,6 +16,11 @@ public final class SupportTicketMapper {
 
     public static SupportTicketResponse toResponse(SupportTicket ticket, List<SupportTicketNote> notes,
             String submitterName) {
+        return toResponse(ticket, notes, submitterName, null);
+    }
+
+    public static SupportTicketResponse toResponse(SupportTicket ticket, List<SupportTicketNote> notes,
+            String submitterName, TicketEntityContext entityContext) {
         return new SupportTicketResponse(
                 ticket.getPublicId(),
                 ticket.getTenantId(),
@@ -27,7 +33,8 @@ public final class SupportTicketMapper {
                 ticket.getEntityId(),
                 ticket.getCreatedAt(),
                 ticket.getUpdatedAt(),
-                notes.stream().map(SupportTicketMapper::toNoteResponse).toList()
+                notes.stream().map(SupportTicketMapper::toNoteResponse).toList(),
+                entityContext
         );
     }
 

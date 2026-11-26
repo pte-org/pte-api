@@ -6,6 +6,8 @@ import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.ExamSessionProctor;
 import com.pte.session.internal.dto.request.AssignProctorRequest;
 import com.pte.session.internal.dto.response.proctor.ProctorAssignmentResponse;
+import com.pte.session.domain.enums.SessionStatus;
+import com.pte.session.internal.exception.staff.ProctorAssignmentLockedException;
 import com.pte.session.internal.exception.staff.ProctorAssignmentNotFoundException;
 import com.pte.session.internal.repository.ExamSessionProctorRepository;
 import com.pte.shared.security.CurrentUser;
@@ -13,6 +15,8 @@ import com.pte.tenancy.TenancyService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -82,6 +86,24 @@ class ProctorAssignmentServiceTest {
                 new AssignProctorRequest(proctorPublicId), caller);
 
         assertThat(response.proctorPublicId()).isEqualTo(proctorPublicId);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = SessionStatus.class, names = {"OPEN", "CLOSED"})
+    void assignProctor_rejectsAnExamThatHasStartedOrEnded(SessionStatus status) {
+        UUID tenantId = UUID.randomUUID();
+        UUID sessionPublicId = UUID.randomUUID();
+        ExamSession session = session(1L, sessionPublicId, tenantId);
+        session.setStatus(status);
+        CurrentUser caller = hostAdmin(tenantId);
+        when(sessionLifecycleService.findOwned(sessionPublicId, caller)).thenReturn(session);
+
+        assertThatThrownBy(() -> proctorService.assignProctor(sessionPublicId,
+                new AssignProctorRequest(UUID.randomUUID()), caller))
+                .isInstanceOf(ProctorAssignmentLockedException.class);
+
+        verify(proctorRepository, never()).save(any());
+        org.mockito.Mockito.verifyNoInteractions(identityService);
     }
 
     @Test

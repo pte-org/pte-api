@@ -316,6 +316,20 @@ class AttendanceCommandServiceTest {
     }
 
     @Test
+    void closedSession_isRejectedForTheHost() {
+        session.setStatus(SessionStatus.CLOSED);
+        when(sessionRepository.findWithLockByPublicIdAndTenantId(sessionPublicId, tenantId))
+                .thenReturn(Optional.of(session));
+        stubNewCommand();
+
+        assertThatThrownBy(() -> service.recordAttendance(sessionPublicId, studentPublicId,
+                request(AttendanceStatus.PRESENT, 0L, "late fix"), host, true))
+                .isInstanceOf(AttendanceWindowClosedException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).getUserMessage())
+                        .isEqualTo("Host attendance modification is only permitted for SCHEDULED or OPEN sessions"));
+    }
+
+    @Test
     void cancelledSession_isRejectedForTheHostToo() {
         session.setStatus(SessionStatus.CANCELLED);
         when(sessionRepository.findWithLockByPublicIdAndTenantId(sessionPublicId, tenantId))

@@ -3,12 +3,10 @@ package com.pte.session.internal.service.attendance;
 import com.pte.session.domain.ExamRegistration;
 import com.pte.session.domain.ExamSession;
 import com.pte.session.domain.enums.IdentityVerificationStatus;
-import com.pte.session.domain.enums.SessionStatus;
 import com.pte.session.dto.request.RecordIdentityVerificationRequest;
 import com.pte.session.dto.response.AttendanceRowView;
 import com.pte.session.internal.constant.AttendanceConstants;
 import com.pte.session.internal.exception.attendance.AttendanceConflictException;
-import com.pte.session.internal.exception.attendance.AttendanceReasonRequiredException;
 import com.pte.session.internal.exception.enrollment.EnrollmentNotFoundException;
 import com.pte.session.internal.repository.ExamRegistrationRepository;
 import com.pte.shared.audit.AuditChange;
@@ -68,9 +66,6 @@ public class IdentityVerificationService {
         }
 
         windowPolicy.requireWritable(session, isHost, now, AttendanceActionKind.IDENTITY_VERIFICATION);
-        if (isHost && session.getStatus() == SessionStatus.CLOSED && note == null) {
-            throw new AttendanceReasonRequiredException(AttendanceConstants.MSG_HOST_REASON_IDENTITY);
-        }
         ExamRegistration registration = registrationRepository
                 .findActiveEnrollment(sessionPublicId, studentPublicId, tenantId)
                 .orElseThrow(EnrollmentNotFoundException::new);

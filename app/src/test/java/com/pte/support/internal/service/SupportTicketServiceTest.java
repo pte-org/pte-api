@@ -15,6 +15,7 @@ import com.pte.support.internal.dto.request.SubmitTicketRequest;
 import com.pte.support.internal.dto.request.UpdateTicketStatusRequest;
 import com.pte.support.internal.dto.response.SupportTicketResponse;
 import com.pte.support.internal.dto.response.SupportTicketSummaryResponse;
+import com.pte.support.internal.dto.response.TicketEntityContext;
 import com.pte.support.internal.exception.EntityReferenceNotFoundException;
 import com.pte.support.internal.exception.InvalidStatusTransitionException;
 import com.pte.support.internal.exception.InvalidTicketEntityPairException;
@@ -242,6 +243,26 @@ class SupportTicketServiceTest {
 
         assertThat(service.getDetailForHost(publicId, caller).submitterName()).isEqualTo("Ninh Le");
         assertThat(service.getDetailForHost(publicId, caller).submitterName()).isNull();
+    }
+
+    @Test
+    void getDetailForHost_linkedQuestion_includesEntityContext() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser caller = caller(tenantId);
+        SupportTicket ticket = ticketFor(tenantId);
+        ticket.setEntityType(TicketEntityType.QUESTION);
+        ticket.setEntityId(UUID.randomUUID().toString());
+        TicketEntityContext context = new TicketEntityContext("WRITE_FROM_DICTATION", "LISTENING", "Please confirm");
+
+        when(ticketRepository.findByPublicIdAndTenantId(ticket.getPublicId(), tenantId))
+                .thenReturn(Optional.of(ticket));
+        when(noteRepository.findByTicketPublicIdOrderByCreatedAtAsc(ticket.getPublicId())).thenReturn(List.of());
+        when(entityReferenceValidator.describe(TicketEntityType.QUESTION, ticket.getEntityId(), caller))
+                .thenReturn(context);
+
+        SupportTicketResponse response = service.getDetailForHost(ticket.getPublicId(), caller);
+
+        assertThat(response.entityContext()).isEqualTo(context);
     }
 
     @Test

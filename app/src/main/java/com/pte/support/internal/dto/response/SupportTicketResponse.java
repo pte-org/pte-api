@@ -21,6 +21,8 @@ public record SupportTicketResponse(
         String entityId,
         Instant createdAt,
         Instant updatedAt,
-        List<SupportTicketNoteResponse> notes
+        List<SupportTicketNoteResponse> notes,
+        /** Description of the linked entity; null when the ticket links nothing or the entity is gone. */
+        TicketEntityContext entityContext
 ) {
 }
