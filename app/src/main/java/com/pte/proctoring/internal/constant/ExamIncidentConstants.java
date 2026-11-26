@@ -12,6 +12,7 @@ public final class ExamIncidentConstants {
     public static final String INCIDENT_ACCESS_DENIED = "Caller is not allowed to access exam session incidents";
     public static final String STUDENT_NOT_ENROLLED = "Student is not enrolled in this exam session";
     public static final String ATTEMPT_NOT_IN_SESSION = "Attempt does not belong to this exam session or student";
+    public static final String SESSION_CLOSED = "Incidents cannot be reported after the exam session has closed";
     public static final String INCIDENT_NOT_FOUND = "Incident not found";
     public static final String INVALID_STATUS =
             "Status must be one of NEW, IN_PROGRESS, ESCALATED, RESOLVED, CLOSED";
