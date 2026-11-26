@@ -47,9 +47,15 @@ public class NineRouterLlmGateway implements LlmGateway {
 
     public NineRouterLlmGateway(RestClient restClient, QuestionGenerationProperties properties,
                                 JsonMapper jsonMapper, GenerationUsageRecorder usageRecorder) {
+        this(restClient, properties.getLlm(), jsonMapper, usageRecorder);
+    }
+
+    /** A gateway for one provider's settings: the usual one, or the primary one tried before it. */
+    public NineRouterLlmGateway(RestClient restClient, QuestionGenerationProperties.Llm llm,
+                                JsonMapper jsonMapper, GenerationUsageRecorder usageRecorder) {
         this.restClient = restClient;
         this.usageRecorder = usageRecorder;
-        this.llm = properties.getLlm();
+        this.llm = llm;
         this.jsonMapper = jsonMapper;
         this.streamReader = new LlmStreamReader(jsonMapper);
     }
@@ -155,7 +161,7 @@ public class NineRouterLlmGateway implements LlmGateway {
 
     /** The same call, read while the model writes: each piece of text goes to the sink as it arrives. */
     private String postStreamed(String body, LlmRole role, String model, long started, TokenSink sink) {
-        sink.begin();
+        sink.begin(model);
         LlmStreamReader.Result result;
         try {
             result = restClient.post()

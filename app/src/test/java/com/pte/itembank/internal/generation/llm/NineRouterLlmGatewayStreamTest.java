@@ -55,10 +55,12 @@ class NineRouterLlmGatewayStreamTest {
     /** Records what the gateway told the live view, in order. */
     static final class RecordingSink implements TokenSink {
         final List<String> calls = new CopyOnWriteArrayList<>();
+        final List<String> models = new CopyOnWriteArrayList<>();
 
         @Override
-        public void begin() {
+        public void begin(String model) {
             calls.add("begin");
+            models.add(model);
         }
 
         @Override
@@ -119,7 +121,8 @@ class NineRouterLlmGatewayStreamTest {
         synchronized (replies) {
             replies.addAll(List.of(script));
         }
-        return new QuestionGenerationConfig().nineRouterLlmGateway(properties, JSON, usageRecorder);
+        // No primary provider is set, so the bean is the plain gateway.
+        return (NineRouterLlmGateway) new QuestionGenerationConfig().nineRouterLlmGateway(properties, JSON, usageRecorder);
     }
 
     private static Reply stream() {
@@ -132,6 +135,7 @@ class NineRouterLlmGatewayStreamTest {
 
         assertThat(answer).isEqualTo("{\"topic\":\"Bees\"}");
         assertThat(sink.calls).containsExactly("begin", "{\"topic\":", "\"Bees\"}");
+        assertThat(sink.models).hasSize(1);
         assertThat(JSON.readTree(bodies.get(0)).path("stream").asBoolean()).isTrue();
     }
 

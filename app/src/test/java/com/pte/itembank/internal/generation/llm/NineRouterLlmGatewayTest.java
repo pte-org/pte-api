@@ -100,7 +100,8 @@ class NineRouterLlmGatewayTest {
         synchronized (replies) {
             replies.addAll(List.of(script));
         }
-        return new QuestionGenerationConfig().nineRouterLlmGateway(properties, JSON, usageRecorder);
+        // No primary provider is set, so the bean is the plain gateway.
+        return (NineRouterLlmGateway) new QuestionGenerationConfig().nineRouterLlmGateway(properties, JSON, usageRecorder);
     }
 
     @Test

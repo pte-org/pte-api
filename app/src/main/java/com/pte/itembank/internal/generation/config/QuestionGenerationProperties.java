@@ -38,6 +38,12 @@ public class QuestionGenerationProperties {
 
     @Valid
     private final Llm llm = new Llm();
+    /**
+     * A provider asked before {@link #llm} for generation only (an empty base URL means none). When it fails (quota
+     * gone, outage) the call goes to {@link #llm}, which the student chat and scoring keep using on their own.
+     */
+    @Valid
+    private final Llm primary = new Llm();
     @Valid
     private final Kokoro kokoro = new Kokoro();
     @Valid
@@ -87,8 +93,8 @@ public class QuestionGenerationProperties {
         private String webUrl = "";
         private String apiKey = "";
         private Duration timeout = Duration.ofSeconds(300);
-        private String voicesUs = "af_heart,af_bella,am_michael";
-        private String voicesUk = "bf_emma,bm_george";
+        /** Comma-separated catalog voice codes to leave out, for a speech server that lacks them. Empty = all. */
+        private String voicesDisabled = "";
     }
 
     @Getter

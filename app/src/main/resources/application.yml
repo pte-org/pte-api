@@ -317,19 +317,34 @@ itembank:
       max-tokens: ${QUESTION_GEN_MAX_TOKENS:0}
       connect-timeout: ${QUESTION_GEN_CONNECT_TIMEOUT:5s}
       read-timeout: ${QUESTION_GEN_READ_TIMEOUT:150s}
-      image-model: ${QUESTION_GEN_IMAGE_MODEL:ag/gemini-3.1-flash-image}
       image-max-attempts: ${QUESTION_GEN_IMAGE_MAX_ATTEMPTS:2}
       retry-delay: ${QUESTION_GEN_RETRY_DELAY:2s}
       # Only for the cost estimate on the AI overview (USD per million tokens).
       price-input-per-million-usd: ${QUESTION_GEN_PRICE_INPUT_PER_MILLION_USD:0.10}
       price-output-per-million-usd: ${QUESTION_GEN_PRICE_OUTPUT_PER_MILLION_USD:0.40}
+    primary:
+      # CLIProxyAPI, for generation only: asked before the gateway above, which answers when it fails
+      # (quota gone, outage). Empty base URL = generation uses the gateway above alone.
+      base-url: ${QUESTION_GEN_PRIMARY_BASE_URL:}
+      api-key: ${QUESTION_GEN_PRIMARY_API_KEY:}
+      generator-model: ${QUESTION_GEN_PRIMARY_MODEL:gpt-6-luna}
+      reviewer-model: ${QUESTION_GEN_PRIMARY_REVIEWER_MODEL:${QUESTION_GEN_PRIMARY_MODEL:gpt-6-luna}}
+      generator-temperature: ${QUESTION_GEN_GENERATOR_TEMPERATURE:0.8}
+      reviewer-temperature: ${QUESTION_GEN_REVIEWER_TEMPERATURE:0.0}
+      max-tokens: ${QUESTION_GEN_MAX_TOKENS:0}
+      connect-timeout: ${QUESTION_GEN_CONNECT_TIMEOUT:5s}
+      read-timeout: ${QUESTION_GEN_PRIMARY_READ_TIMEOUT:90s}
+      image-model: ${QUESTION_GEN_PRIMARY_IMAGE_MODEL:gpt-image-2}
+      image-max-attempts: ${QUESTION_GEN_IMAGE_MAX_ATTEMPTS:2}
+      retry-delay: ${QUESTION_GEN_RETRY_DELAY:2s}
+      price-input-per-million-usd: 0
+      price-output-per-million-usd: 0
     kokoro:
       base-url: ${KOKORO_BASE_URL:}
       web-url: ${KOKORO_WEB_URL:}
       api-key: ${KOKORO_API_KEY:}
       timeout: ${KOKORO_TIMEOUT:300s}
-      voices-us: ${QUESTION_GEN_VOICES_US:af_heart,af_bella,am_michael}
-      voices-uk: ${QUESTION_GEN_VOICES_UK:bf_emma,bm_george}
+      voices-disabled: ${QUESTION_GEN_VOICES_DISABLED:}
     review:
       vision-check: ${QUESTION_GEN_VISION_CHECK:false}
     limits:
