@@ -13,11 +13,13 @@ public final class SupportTicketMapper {
     private SupportTicketMapper() {
     }
 
-    public static SupportTicketResponse toResponse(SupportTicket ticket, List<SupportTicketNote> notes) {
+    public static SupportTicketResponse toResponse(SupportTicket ticket, List<SupportTicketNote> notes,
+            String submitterName) {
         return new SupportTicketResponse(
                 ticket.getPublicId(),
                 ticket.getTenantId(),
                 ticket.getSubmitterUserPublicId(),
+                submitterName,
                 ticket.getCategory(),
                 ticket.getDescription(),
                 ticket.getStatus(),
