@@ -27,6 +27,7 @@ public final class PracticeOptionVerdictReader {
     private static final String SELECTIONS = "selections";
     private static final String ORDER_INDEX = "orderIndex";
     private static final String BLANK_INDEX = "blankIndex";
+    private static final String CORRECT_GAP_INDEX = "correctGapIndex";
     private static final String CORRECT = "correct";
     private static final String TEXT = "text";
     private static final Set<String> SINGLE_CHOICE_RENDERERS = Set.of("MC_READING_SINGLE_V1", "MC_LISTENING_SINGLE_V1",
@@ -72,7 +73,7 @@ public final class PracticeOptionVerdictReader {
             return blankVerdicts(key, payload.path(SELECTIONS));
         }
         return "FILL_IN_THE_BLANKS_DRAG_AND_DROP_V1".equals(rendererKey)
-                ? blankVerdicts(key, payload.path(PLACEMENTS)) : new ArrayList<>();
+                ? dragVerdicts(key, payload.path(PLACEMENTS)) : new ArrayList<>();
     }
 
     /** A choice answer names the options it picked by their position, as a single id or a list of them. */
@@ -94,16 +95,70 @@ public final class PracticeOptionVerdictReader {
         List<OptionVerdict> verdicts = new ArrayList<>();
         for (JsonNode option : key) {
             int orderIndex = option.path(ORDER_INDEX).asInt(-1);
-            JsonNode blankIndex = option.path(BLANK_INDEX);
-            if (orderIndex < 0 || !blankIndex.isInt()) {
+            Integer gap = gapOf(option);
+            if (orderIndex < 0 || gap == null) {
                 continue;
             }
             String word = text(option);
-            String inGap = byGap.path(String.valueOf(blankIndex.asInt())).asText("").strip();
+            String inGap = byGap.path(String.valueOf(gap)).asText("").strip();
             verdicts.add(new OptionVerdict(orderIndex, !word.isEmpty() && word.equals(inGap),
-                    option.path(CORRECT).asBoolean(false), blankIndex.asInt(), word));
+                    option.path(CORRECT).asBoolean(false), gap, word));
         }
         return verdicts;
+    }
+
+    /**
+     * A drag-and-drop key names only the right word of each gap (as {@code correctGapIndex}); the extra words belong
+     * to no gap. So a gap holding any other word has no option of its own to mark, and gets a wrong verdict for the
+     * word that was put there, which is what lets the screen show the gap as wrong instead of as left empty.
+     */
+    private static List<OptionVerdict> dragVerdicts(JsonNode key, JsonNode byGap) {
+        List<OptionVerdict> verdicts = blankVerdicts(key, byGap);
+        Set<Integer> markedGaps = new HashSet<>();
+        for (OptionVerdict verdict : verdicts) {
+            if (verdict.selected() && verdict.blankIndex() != null) {
+                markedGaps.add(verdict.blankIndex());
+            }
+        }
+        List<OptionVerdict> placedWrong = new ArrayList<>();
+        for (var entry : byGap.properties()) {
+            Integer gap = gapNumber(entry.getKey());
+            String word = entry.getValue().asText("").strip();
+            if (gap == null || word.isEmpty() || markedGaps.contains(gap)) {
+                continue;
+            }
+            placedWrong.add(new OptionVerdict(orderIndexOfWord(key, word), true, false, gap, word));
+        }
+        verdicts.addAll(placedWrong);
+        return verdicts;
+    }
+
+    /** The gap an option belongs to: its own blank for a dropdown, the gap it is right for in a drag-and-drop key. */
+    private static Integer gapOf(JsonNode option) {
+        JsonNode blankIndex = option.path(BLANK_INDEX);
+        if (blankIndex.isInt()) {
+            return blankIndex.asInt();
+        }
+        JsonNode correctGapIndex = option.path(CORRECT_GAP_INDEX);
+        return correctGapIndex.isInt() ? correctGapIndex.asInt() : null;
+    }
+
+    private static Integer gapNumber(String gap) {
+        try {
+            return Integer.parseInt(gap.strip());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    /** Where a word sits in the key, or -1 for one the key does not list. */
+    private static int orderIndexOfWord(JsonNode key, String word) {
+        for (JsonNode option : key) {
+            if (word.equals(text(option))) {
+                return option.path(ORDER_INDEX).asInt(-1);
+            }
+        }
+        return -1;
     }
 
     private static String text(JsonNode option) {
