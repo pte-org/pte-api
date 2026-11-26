@@ -49,12 +49,12 @@ class LiveJobTest {
         RecordingEmitter watcher = new RecordingEmitter();
 
         job.attach(watcher);
-        job.begin(0, LlmRole.GENERATOR, T0);
+        job.begin(0, LlmRole.GENERATOR, "test-model", T0);
         job.token(0, LlmRole.GENERATOR, "Bees", T0);
 
         assertThat(watcher.events).hasSize(3);
         assertThat(watcher.events.get(0)).contains("event:snapshot");
-        assertThat(watcher.events.get(1)).contains("event:begin").contains("attempt=1");
+        assertThat(watcher.events.get(1)).contains("event:begin").contains("attempt=1").contains("model=test-model");
         assertThat(watcher.events.get(2)).contains("event:token").contains("Bees");
     }
 
@@ -62,7 +62,7 @@ class LiveJobTest {
     void aLateWatcherCatchesUpWithTheTextWrittenSoFar() {
         LiveJob job = new LiveJob(T0);
         job.stage(0, "GENERATING", T0);
-        job.begin(0, LlmRole.GENERATOR, T0);
+        job.begin(0, LlmRole.GENERATOR, "test-model", T0);
         job.token(0, LlmRole.GENERATOR, "The city ", T0);
         job.token(0, LlmRole.GENERATOR, "council", T0);
         RecordingEmitter late = new RecordingEmitter();
@@ -76,9 +76,9 @@ class LiveJobTest {
     @Test
     void aNewCallStartsTheAgentTextAgainAndCountsTheAttempt() {
         LiveJob job = new LiveJob(T0);
-        job.begin(0, LlmRole.REVIEWER, T0);
+        job.begin(0, LlmRole.REVIEWER, "test-model", T0);
         job.token(0, LlmRole.REVIEWER, "FAIL", T0);
-        job.begin(0, LlmRole.REVIEWER, T0);
+        job.begin(0, LlmRole.REVIEWER, "test-model", T0);
         job.token(0, LlmRole.REVIEWER, "PASS", T0);
         RecordingEmitter late = new RecordingEmitter();
 
@@ -92,7 +92,7 @@ class LiveJobTest {
         LiveJob job = new LiveJob(T0);
         RecordingEmitter watcher = new RecordingEmitter();
         job.attach(watcher);
-        job.begin(0, LlmRole.GENERATOR, T0);
+        job.begin(0, LlmRole.GENERATOR, "test-model", T0);
         String longThought = "x".repeat(GenerationLiveConstants.THINKING_TAIL_CHARS * 3);
         job.thinking(0, LlmRole.GENERATOR, longThought, T0);
         job.thinking(0, LlmRole.GENERATOR, "Five bars.", T0);
@@ -110,9 +110,9 @@ class LiveJobTest {
     @Test
     void aNewCallForgetsTheThoughtsOfTheLastOne() {
         LiveJob job = new LiveJob(T0);
-        job.begin(0, LlmRole.REVIEWER, T0);
+        job.begin(0, LlmRole.REVIEWER, "test-model", T0);
         job.thinking(0, LlmRole.REVIEWER, "old plan", T0);
-        job.begin(0, LlmRole.REVIEWER, T0);
+        job.begin(0, LlmRole.REVIEWER, "test-model", T0);
         RecordingEmitter late = new RecordingEmitter();
 
         job.attach(late);

@@ -29,8 +29,8 @@ public class GenerationLiveFeed {
         LiveJob job = registry.open(jobPublicId);
         return new TokenSink() {
             @Override
-            public void begin() {
-                job.begin(index, agent, registry.clock().instant());
+            public void begin(String model) {
+                job.begin(index, agent, model, registry.clock().instant());
             }
 
             @Override

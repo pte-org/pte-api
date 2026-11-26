@@ -19,6 +19,7 @@ final class LiveItem {
     /** The end of what each agent thought in its current call, and how much it thought in all. */
     private final Map<LlmRole, StringBuilder> thoughts = new EnumMap<>(LlmRole.class);
     private final Map<LlmRole, Integer> thoughtChars = new EnumMap<>(LlmRole.class);
+    private final Map<LlmRole, String> models = new EnumMap<>(LlmRole.class);
     private String stage;
     private LlmRole activeAgent;
     private UUID audioRef;
@@ -33,8 +34,9 @@ final class LiveItem {
     }
 
     /** @return the number of the call that starts */
-    int begin(LlmRole agent) {
+    int begin(LlmRole agent, String model) {
         activeAgent = agent;
+        models.put(agent, model == null ? "" : model);
         texts.put(agent, new StringBuilder());
         thoughts.put(agent, new StringBuilder());
         thoughtChars.put(agent, 0);
@@ -96,6 +98,6 @@ final class LiveItem {
         String tail = thought == null ? "" : thought.substring(
                 Math.max(0, thought.length() - GenerationLiveConstants.THINKING_TAIL_CHARS));
         return new LiveEvent.AgentText(attempts.getOrDefault(agent, 0), text.toString(), tail,
-                thoughtChars.getOrDefault(agent, 0));
+                thoughtChars.getOrDefault(agent, 0), models.getOrDefault(agent, ""));
     }
 }
