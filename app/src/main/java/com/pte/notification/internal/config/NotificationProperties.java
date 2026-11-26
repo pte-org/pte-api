@@ -24,6 +24,18 @@ public class NotificationProperties {
         this.supportEmail = supportEmail;
     }
 
+    /** Time zone the exam times in emails are written in (students are told which one it is). */
+    @NotBlank
+    private String displayZone = "Asia/Ho_Chi_Minh";
+
+    public String getDisplayZone() {
+        return displayZone;
+    }
+
+    public void setDisplayZone(String displayZone) {
+        this.displayZone = displayZone;
+    }
+
     /** Base URL of the tenant web app; the approval and rejection emails link to its /login and /register pages. */
     @NotBlank
     private String tenantWebUrl = "http://localhost:3000";
