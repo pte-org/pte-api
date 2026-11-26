@@ -316,7 +316,7 @@ itembank:
       reviewer-temperature: ${QUESTION_GEN_REVIEWER_TEMPERATURE:0.0}
       max-tokens: ${QUESTION_GEN_MAX_TOKENS:0}
       connect-timeout: ${QUESTION_GEN_CONNECT_TIMEOUT:5s}
-      read-timeout: ${QUESTION_GEN_READ_TIMEOUT:90s}
+      read-timeout: ${QUESTION_GEN_READ_TIMEOUT:150s}
       image-model: ${QUESTION_GEN_IMAGE_MODEL:ag/gemini-3.1-flash-image}
       image-max-attempts: ${QUESTION_GEN_IMAGE_MAX_ATTEMPTS:2}
       retry-delay: ${QUESTION_GEN_RETRY_DELAY:2s}
@@ -345,7 +345,7 @@ itembank:
       consecutive-provider-failures-to-stop: ${QUESTION_GEN_CONSECUTIVE_FAILURES_TO_STOP:3}
     worker:
       poll-delay-ms: ${QUESTION_GEN_POLL_DELAY_MS:3000}
-      lease-duration: ${QUESTION_GEN_LEASE_DURATION:10m}
+      lease-duration: ${QUESTION_GEN_LEASE_DURATION:15m}
     # The live view of a running job (server-sent events), held in memory on this instance.
     live:
       emitter-timeout-ms: ${QUESTION_GEN_LIVE_STREAM_TIMEOUT_MS:1800000}

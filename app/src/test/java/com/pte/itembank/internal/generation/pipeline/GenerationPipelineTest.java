@@ -40,6 +40,7 @@ import static org.mockito.Mockito.when;
 
 class GenerationPipelineTest {
 
+    private static final Runnable NO_RENEWAL = () -> { };
     private final ItemGenerator generator = mock(ItemGenerator.class);
     private final GeneratedQuestionWriter writer = mock(GeneratedQuestionWriter.class);
     private final GenerationItemStateService itemState = mock(GenerationItemStateService.class);
@@ -75,7 +76,7 @@ class GenerationPipelineTest {
             throw new IllegalStateException("boom");
         });
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.FAILED);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.FAILED);
 
         verify(liveFeed).stage(claim.jobPublicId(), 0, ItemStage.GENERATING);
         verify(liveFeed).sink(claim.jobPublicId(), 0, LlmRole.GENERATOR);
@@ -110,7 +111,7 @@ class GenerationPipelineTest {
         when(writer.save(any(), any(), any(Integer.class), any(), any())).thenReturn(ItemOutcome.SAVED);
 
         // 15 calls at 5 a round give 3 rounds: two redraws, then the last chart is kept.
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.SAVED);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.SAVED);
 
         verify(liveFeed).draft(claim.jobPublicId(), 0, 1, chartItem.question());
         verify(liveFeed).draft(claim.jobPublicId(), 0, 3, chartItem.question());
@@ -131,7 +132,7 @@ class GenerationPipelineTest {
                 .thenReturn(item);
         when(writer.save(any(), any(), any(Integer.class), any(), any())).thenReturn(ItemOutcome.SAVED);
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.SAVED);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.SAVED);
 
         verify(generator, org.mockito.Mockito.times(3)).generate(any(), any());
         verify(itemState, never()).fail(any(), any(Integer.class), any(), any());
@@ -146,7 +147,7 @@ class GenerationPipelineTest {
         when(avoidTopicsProvider.getAvoidTopicsForTaskType("MC_READING_SINGLE")).thenReturn("No prior topics.");
         when(generator.generate(any(), any())).thenReturn(item);
 
-        assertThat(pipeline.runItem(formClaim, admin, 0)).isEqualTo(ItemOutcome.SAVED);
+        assertThat(pipeline.runItem(formClaim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.SAVED);
 
         verify(itemState).ready(formClaim, 0);
         verify(liveFeed).stage(formClaim.jobPublicId(), 0, ItemStage.READY);
@@ -166,7 +167,7 @@ class GenerationPipelineTest {
                 java.util.Optional.of(new com.pte.itembank.internal.generation.media.RenderedMedia(null,
                         UUID.randomUUID(), java.util.Map.of(), new byte[]{1})));
 
-        pipeline.runItem(claim, admin, 0);
+        pipeline.runItem(claim, admin, 0, NO_RENEWAL);
 
         verify(imageReviewer, never()).review(any(ItemDraft.ChartDraft.class), any());
     }
@@ -175,7 +176,7 @@ class GenerationPipelineTest {
     void aStageTheItemNeverReachedIsNotReported() {
         when(itemState.advance(claim, 0, ItemStage.GENERATING)).thenReturn(false);
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.LEASE_LOST);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.LEASE_LOST);
 
         verify(liveFeed, never()).stage(any(), any(Integer.class), any());
     }
@@ -186,7 +187,7 @@ class GenerationPipelineTest {
         when(generator.generate(any(), any())).thenReturn(item);
         when(writer.save(claim, admin, 0, item, null)).thenReturn(ItemOutcome.SAVED);
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.SAVED);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.SAVED);
 
         ArgumentCaptor<GenerationRequest> request = ArgumentCaptor.forClass(GenerationRequest.class);
         verify(generator).generate(request.capture(), any());
@@ -205,7 +206,7 @@ class GenerationPipelineTest {
         when(generator.generate(any(), any())).thenReturn(item);
         when(writer.save(any(), any(), any(Integer.class), any(), any())).thenReturn(ItemOutcome.SAVED);
 
-        pipeline.runItem(claim, admin, 0);
+        pipeline.runItem(claim, admin, 0, NO_RENEWAL);
 
         ArgumentCaptor<GenerationCallBudget> budget = ArgumentCaptor.forClass(GenerationCallBudget.class);
         verify(generator).generate(any(), budget.capture());
@@ -216,7 +217,7 @@ class GenerationPipelineTest {
     void aLostLeaseStopsBeforeAnyWork() {
         when(itemState.advance(claim, 0, ItemStage.GENERATING)).thenReturn(false);
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.LEASE_LOST);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.LEASE_LOST);
         verifyNoInteractions(generator, writer);
     }
 
@@ -225,7 +226,7 @@ class GenerationPipelineTest {
         when(itemState.advance(claim, 0, ItemStage.GENERATING)).thenReturn(true);
         when(generator.supports(any())).thenReturn(false);
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.FAILED);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.FAILED);
         verify(itemState).fail(claim, 0, "GENERATION_NO_GENERATOR", null);
     }
 
@@ -234,7 +235,7 @@ class GenerationPipelineTest {
         ready();
         when(generator.generate(any(), any())).thenThrow(new LlmProviderException(LlmFailureType.AUTH));
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.FAILED_PROVIDER_AUTH);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.FAILED_PROVIDER_AUTH);
         verify(itemState).fail(claim, 0, "GENERATION_PROVIDER_AUTH", null);
     }
 
@@ -243,7 +244,7 @@ class GenerationPipelineTest {
         ready();
         when(generator.generate(any(), any())).thenThrow(new LlmProviderException(LlmFailureType.UNAVAILABLE));
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.FAILED_PROVIDER_UNAVAILABLE);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.FAILED_PROVIDER_UNAVAILABLE);
         verify(itemState).fail(claim, 0, "GENERATION_PROVIDER_UNAVAILABLE", null);
     }
 
@@ -252,7 +253,7 @@ class GenerationPipelineTest {
         ready();
         when(generator.generate(any(), any())).thenThrow(new LlmProviderException(LlmFailureType.EMPTY_RESPONSE));
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.FAILED);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.FAILED);
         verify(itemState).fail(claim, 0, "GENERATION_EMPTY_RESPONSE", null);
     }
 
@@ -261,7 +262,7 @@ class GenerationPipelineTest {
         ready();
         when(generator.generate(any(), any())).thenThrow(new GenerationCallBudgetExceededException());
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.FAILED);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.FAILED);
         verify(itemState).fail(claim, 0, "GENERATION_CALL_BUDGET_EXCEEDED", null);
     }
 
@@ -272,7 +273,7 @@ class GenerationPipelineTest {
         when(writer.save(any(), any(), any(Integer.class), any(), any()))
                 .thenThrow(new QuestionValidationException("OPTIONS_REQUIRED"));
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.FAILED);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.FAILED);
         verify(itemState).fail(claim, 0, "GENERATION_ITEMBANK_REJECTED", "OPTIONS_REQUIRED");
     }
 
@@ -292,7 +293,7 @@ class GenerationPipelineTest {
         org.mockito.Mockito.doThrow(new IllegalStateException("live view down")).when(liveFeed)
                 .media(any(), any(Integer.class), any(), any());
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.FAILED);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.FAILED);
         verify(mediaRenderer).discard(rendered, admin);
     }
 
@@ -301,7 +302,7 @@ class GenerationPipelineTest {
         ready();
         when(generator.generate(any(), any())).thenThrow(new IllegalStateException("contains the secret prompt"));
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.FAILED);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.FAILED);
         verify(itemState).fail(eq(claim), eq(0), eq("GENERATION_INTERNAL_ERROR"), isNull());
     }
 
@@ -311,7 +312,7 @@ class GenerationPipelineTest {
         when(generator.generate(any(), any())).thenReturn(item);
         when(writer.save(claim, admin, 0, item, null)).thenReturn(ItemOutcome.CANCELLED);
 
-        assertThat(pipeline.runItem(claim, admin, 0)).isEqualTo(ItemOutcome.CANCELLED);
+        assertThat(pipeline.runItem(claim, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.CANCELLED);
     }
 
     private JobClaim pictureClaim() {
@@ -347,7 +348,7 @@ class GenerationPipelineTest {
                 java.util.Optional.of(new com.pte.itembank.internal.generation.media.RenderedMedia(null, image,
                         java.util.Map.of())));
 
-        assertThat(pipeline.runItem(picture, admin, 0)).isEqualTo(ItemOutcome.SAVED);
+        assertThat(pipeline.runItem(picture, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.SAVED);
 
         assertThat(asked.getAllValues()).extracting(GenerationRequest::isPicture).containsExactly(true, false);
         verify(liveFeed).review(picture.jobPublicId(), 0, "IMAGE", false,
@@ -366,7 +367,7 @@ class GenerationPipelineTest {
                 java.util.Optional.of(new com.pte.itembank.internal.generation.media.RenderedMedia(null,
                         UUID.randomUUID(), java.util.Map.of())));
 
-        assertThat(pipeline.runItem(picture, admin, 0)).isEqualTo(ItemOutcome.SAVED);
+        assertThat(pipeline.runItem(picture, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.SAVED);
 
         verify(generator, org.mockito.Mockito.times(1)).generate(any(), any());
     }
@@ -384,7 +385,7 @@ class GenerationPipelineTest {
                 .thenThrow(new com.pte.itembank.internal.generation.exception.GenerationMediaException(
                         QuestionGenerationConstants.GENERATION_IMAGE_FAILED, "UNAVAILABLE"));
 
-        assertThat(pipeline.runItem(picture, admin, 0)).isEqualTo(ItemOutcome.FAILED);
+        assertThat(pipeline.runItem(picture, admin, 0, NO_RENEWAL)).isEqualTo(ItemOutcome.FAILED);
 
         verify(generator, org.mockito.Mockito.times(1)).generate(any(), any());
     }

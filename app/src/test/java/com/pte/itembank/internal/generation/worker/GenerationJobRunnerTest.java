@@ -47,7 +47,7 @@ class GenerationJobRunnerTest {
         when(leases.leaseState(claim)).thenReturn(LeaseState.HELD);
         when(leases.renewLease(claim)).thenReturn(true);
         when(itemState.pendingIndexes(5L)).thenReturn(List.of(0, 1, 2));
-        when(pipeline.runItem(eq(claim), eq(admin), anyInt())).thenReturn(ItemOutcome.SAVED);
+        when(pipeline.runItem(eq(claim), eq(admin), anyInt(), any())).thenReturn(ItemOutcome.SAVED);
     }
 
     @Test
@@ -65,20 +65,20 @@ class GenerationJobRunnerTest {
     void everyPendingItemIsRunInOrderAndTheJobIsThenFinishedByCounts() {
         runner.run(claim);
 
-        verify(pipeline).runItem(claim, admin, 0);
-        verify(pipeline).runItem(claim, admin, 1);
-        verify(pipeline).runItem(claim, admin, 2);
+        verify(pipeline).runItem(eq(claim), eq(admin), eq(0), any());
+        verify(pipeline).runItem(eq(claim), eq(admin), eq(1), any());
+        verify(pipeline).runItem(eq(claim), eq(admin), eq(2), any());
         verify(leases, times(3)).renewLease(claim);
         verify(leases).finish(claim, null, null);
     }
 
     @Test
     void aFailedItemDoesNotStopTheJob() {
-        when(pipeline.runItem(claim, admin, 1)).thenReturn(ItemOutcome.FAILED);
+        when(pipeline.runItem(eq(claim), eq(admin), eq(1), any())).thenReturn(ItemOutcome.FAILED);
 
         runner.run(claim);
 
-        verify(pipeline).runItem(claim, admin, 2);
+        verify(pipeline).runItem(eq(claim), eq(admin), eq(2), any());
         verify(leases).finish(claim, null, null);
     }
 
@@ -88,22 +88,38 @@ class GenerationJobRunnerTest {
 
         runner.run(claim);
 
-        verify(pipeline).runItem(claim, admin, 0);
-        verify(pipeline, never()).runItem(claim, admin, 1);
+        verify(pipeline).runItem(eq(claim), eq(admin), eq(0), any());
+        verify(pipeline, never()).runItem(eq(claim), eq(admin), eq(1), any());
         verify(itemState).cancelOpen(claim);
         verify(leases).finish(claim, JobStatus.CANCELLED, null);
     }
 
     @Test
+    void renewsTheLeaseWheneverThePipelineIsAboutToCallTheProvider() {
+        when(itemState.pendingIndexes(claim.jobId())).thenReturn(List.of(0));
+        when(pipeline.runItem(eq(claim), eq(admin), eq(0), any())).thenAnswer(call -> {
+            Runnable beforeProviderCall = call.getArgument(3);
+            beforeProviderCall.run();
+            beforeProviderCall.run();
+            return ItemOutcome.SAVED;
+        });
+
+        runner.run(claim);
+
+        // Once before the question, then once per provider call.
+        verify(leases, times(3)).renewLease(claim);
+    }
+
+    @Test
     void anInterruptedItemEndsTheJobAsCancelledWhateverItReported() {
-        when(pipeline.runItem(claim, admin, 0)).thenAnswer(call -> {
+        when(pipeline.runItem(eq(claim), eq(admin), eq(0), any())).thenAnswer(call -> {
             Thread.currentThread().interrupt(); // what a cancel does to the provider call in progress
             return ItemOutcome.FAILED;
         });
 
         runner.run(claim);
 
-        verify(pipeline, never()).runItem(claim, admin, 1);
+        verify(pipeline, never()).runItem(eq(claim), eq(admin), eq(1), any());
         verify(itemState).cancelOpen(claim);
         verify(leases).finish(claim, JobStatus.CANCELLED, null);
         assertThat(Thread.currentThread().isInterrupted()).isFalse();
@@ -111,11 +127,11 @@ class GenerationJobRunnerTest {
 
     @Test
     void aCancelNoticedWhileSavingTheItemInFlightEndsTheJobAsCancelled() {
-        when(pipeline.runItem(claim, admin, 0)).thenReturn(ItemOutcome.CANCELLED);
+        when(pipeline.runItem(eq(claim), eq(admin), eq(0), any())).thenReturn(ItemOutcome.CANCELLED);
 
         runner.run(claim);
 
-        verify(pipeline, never()).runItem(claim, admin, 1);
+        verify(pipeline, never()).runItem(eq(claim), eq(admin), eq(1), any());
         verify(leases).finish(claim, JobStatus.CANCELLED, null);
     }
 
@@ -125,8 +141,8 @@ class GenerationJobRunnerTest {
 
         runner.run(claim);
 
-        verify(pipeline).runItem(claim, admin, 0);
-        verify(pipeline, never()).runItem(claim, admin, 1);
+        verify(pipeline).runItem(eq(claim), eq(admin), eq(0), any());
+        verify(pipeline, never()).runItem(eq(claim), eq(admin), eq(1), any());
         verify(leases, never()).finish(any(), any(), any());
     }
 
@@ -142,21 +158,21 @@ class GenerationJobRunnerTest {
 
     @Test
     void aLeaseLostInsideTheItemEndsTheRunWithoutFinishing() {
-        when(pipeline.runItem(claim, admin, 0)).thenReturn(ItemOutcome.LEASE_LOST);
+        when(pipeline.runItem(eq(claim), eq(admin), eq(0), any())).thenReturn(ItemOutcome.LEASE_LOST);
 
         runner.run(claim);
 
         verify(leases, never()).finish(any(), any(), any());
-        verify(pipeline, never()).runItem(claim, admin, 1);
+        verify(pipeline, never()).runItem(eq(claim), eq(admin), eq(1), any());
     }
 
     @Test
     void aRejectedProviderKeyStopsTheWholeJobAtOnce() {
-        when(pipeline.runItem(claim, admin, 0)).thenReturn(ItemOutcome.FAILED_PROVIDER_AUTH);
+        when(pipeline.runItem(eq(claim), eq(admin), eq(0), any())).thenReturn(ItemOutcome.FAILED_PROVIDER_AUTH);
 
         runner.run(claim);
 
-        verify(pipeline, never()).runItem(claim, admin, 1);
+        verify(pipeline, never()).runItem(eq(claim), eq(admin), eq(1), any());
         verify(itemState).failOpen(claim, "GENERATION_PROVIDER_AUTH");
         verify(leases).finish(claim, JobStatus.FAILED, "GENERATION_PROVIDER_AUTH");
     }
@@ -165,11 +181,11 @@ class GenerationJobRunnerTest {
     void consecutiveProviderOutagesStopTheJobAtTheThreshold() {
         properties.getLimits().setConsecutiveProviderFailuresToStop(2);
         when(itemState.pendingIndexes(5L)).thenReturn(List.of(0, 1, 2, 3));
-        when(pipeline.runItem(eq(claim), eq(admin), anyInt())).thenReturn(ItemOutcome.FAILED_PROVIDER_UNAVAILABLE);
+        when(pipeline.runItem(eq(claim), eq(admin), anyInt(), any())).thenReturn(ItemOutcome.FAILED_PROVIDER_UNAVAILABLE);
 
         runner.run(claim);
 
-        verify(pipeline, times(2)).runItem(eq(claim), eq(admin), anyInt());
+        verify(pipeline, times(2)).runItem(eq(claim), eq(admin), anyInt(), any());
         verify(itemState).failOpen(claim, "GENERATION_PROVIDER_UNAVAILABLE");
         verify(leases).finish(claim, JobStatus.FAILED, "GENERATION_PROVIDER_UNAVAILABLE");
     }
@@ -178,13 +194,13 @@ class GenerationJobRunnerTest {
     void aSuccessBetweenOutagesResetsTheCounter() {
         properties.getLimits().setConsecutiveProviderFailuresToStop(2);
         when(itemState.pendingIndexes(5L)).thenReturn(List.of(0, 1, 2, 3));
-        when(pipeline.runItem(eq(claim), eq(admin), anyInt())).thenReturn(
+        when(pipeline.runItem(eq(claim), eq(admin), anyInt(), any())).thenReturn(
                 ItemOutcome.FAILED_PROVIDER_UNAVAILABLE, ItemOutcome.SAVED,
                 ItemOutcome.FAILED_PROVIDER_UNAVAILABLE, ItemOutcome.SAVED);
 
         runner.run(claim);
 
-        verify(pipeline, times(4)).runItem(eq(claim), eq(admin), anyInt());
+        verify(pipeline, times(4)).runItem(eq(claim), eq(admin), anyInt(), any());
         verify(itemState, never()).failOpen(any(), any());
         verify(leases).finish(claim, null, null);
         verify(leases, never()).finish(eq(claim), eq(JobStatus.FAILED), any());
