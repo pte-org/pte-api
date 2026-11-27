@@ -1,11 +1,13 @@
 package com.pte.billing.internal.service;
 
+import com.pte.billing.BillingSettingsService;
 import com.pte.billing.domain.enums.TenantApplicationStatus;
 import com.pte.billing.TenantApplicationApprovedEvent;
 import com.pte.billing.internal.dto.request.application.RejectApplicationRequest;
 import com.pte.billing.internal.dto.request.application.SubmitApplicationRequest;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
 import com.pte.billing.internal.constant.BillingConstants;
+import com.pte.billing.internal.exception.application.ApplicationEmailAlreadyPendingException;
 import com.pte.billing.internal.exception.application.ApplicationNotPendingException;
 import com.pte.billing.internal.exception.license.RequestedCodeAlreadyUsedException;
 import com.pte.billing.internal.exception.application.RequestedNameAlreadyUsedException;
@@ -60,11 +62,15 @@ class TenantApplicationServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private BillingSettingsService billingSettingsService;
+
     private TenantApplicationService service;
 
     @BeforeEach
     void setUp() {
-        service = new TenantApplicationService(tenancyService, identityService, platformSettingService, eventPublisher, null);
+        service = new TenantApplicationService(tenancyService, identityService, platformSettingService, eventPublisher, null,
+                billingSettingsService);
     }
 
     private SubmitApplicationRequest submitRequest(String code) {
@@ -111,6 +117,26 @@ class TenantApplicationServiceTest {
     }
 
     @Test
+    void submit_taxCodeHeldByPendingOrApprovedOrganization_throwsWithoutSaving() {
+        when(tenancyService.existsByTaxCode("0123456789")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.submit(submitRequest("acme")))
+                .isInstanceOf(RequestedTaxCodeAlreadyUsedException.class);
+        verify(tenancyService, never()).submitApplication(any(), any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    void submit_emailWithApplicationAlreadyPending_throwsWithoutSaving() {
+        when(tenancyService.hasPendingApplicationForEmail("contact@acme.example")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.submit(submitRequest("acme")))
+                .isInstanceOf(ApplicationEmailAlreadyPendingException.class);
+        verify(tenancyService, never()).submitApplication(any(), any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
     void submit_nameAlreadyATenant_throwsWithoutSaving() {
         when(tenancyService.existsByName("Acme School")).thenReturn(true);
 
@@ -140,6 +166,21 @@ class TenantApplicationServiceTest {
         assertThat(response.publicId()).isEqualTo(applicationId);
         assertThat(response.status()).isEqualTo("PENDING");
         verify(tenancyService).findApplication(applicationId);
+    }
+
+    @Test
+    void get_pendingApplicationCarriesTheSlaDeadline() {
+        UUID applicationId = UUID.randomUUID();
+        Organization application = pendingApplication(applicationId, "acme");
+        Instant submitted = Instant.parse("2026-11-24T03:00:00Z");
+        org.springframework.test.util.ReflectionTestUtils.setField(application, "createdAt", submitted);
+        when(tenancyService.findApplication(applicationId)).thenReturn(Optional.of(application));
+        when(billingSettingsService.getTenantApplicationResponseSlaHours()).thenReturn(72);
+
+        TenantApplicationResponse response = service.get(applicationId);
+
+        assertThat(response.submittedAt()).isEqualTo(submitted);
+        assertThat(response.responseDueAt()).isEqualTo(submitted.plusSeconds(72 * 3600L));
     }
 
     private Organization pendingApplication(UUID publicId, String code) {
@@ -256,7 +297,7 @@ class TenantApplicationServiceTest {
         when(tenancyService.findApplicationForUpdate(applicationId)).thenReturn(Optional.of(application));
         when(platformSettingService.getInteger(BillingConstants.FREE_STUDENT_LIMIT_SETTING_KEY)).thenReturn(75);
         when(tenancyService.approveApplication(eq(application), any(), anyInt()))
-                .thenThrow(new DataIntegrityViolationException("uq_org_tax_code_approved"));
+                .thenThrow(new DataIntegrityViolationException("uq_org_tax_code_live"));
 
         assertThatThrownBy(() -> service.approve(applicationId,
                 new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_ADMIN"))))

@@ -22,12 +22,14 @@ import com.pte.itembank.internal.generation.exception.GenerationLimitException;
 import com.pte.itembank.internal.generation.repository.GenerationBatchRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
+import com.pte.itembank.internal.generation.worker.GenerationCancelRequested;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Clock;
@@ -62,14 +64,18 @@ class QuestionGenerationBatchServiceTest {
     private final QuestionGenerationProperties properties = new QuestionGenerationProperties();
     private final QuestionGenerationBatchQueryService queries = mock(QuestionGenerationBatchQueryService.class);
     private final GenerationLimits limits = new GenerationLimits(mock(BillingSettingsService.class, call -> call.getArgument(1)), properties);
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private final QuestionGenerationBatchService service = new QuestionGenerationBatchService(validator, jobs, items,
             batches, limits, audit, queries,
-            new GenerationQuotaGuard(jobs, limits, Clock.fixed(NOW, ZoneOffset.UTC)), Clock.fixed(NOW, ZoneOffset.UTC));
+            new GenerationQuotaGuard(jobs, limits, Clock.fixed(NOW, ZoneOffset.UTC)), events,
+            Clock.fixed(NOW, ZoneOffset.UTC));
     private final CurrentUser staff = new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_STAFF"));
     private final SubmitGenerationBatchRequest request = new SubmitGenerationBatchRequest("PRACTICE", List.of());
 
     @BeforeEach
     void setUp() {
+        // One child at a time unless a test says otherwise, so the run order stays easy to read.
+        properties.getLimits().setMaxConcurrentJobs(1);
         BatchRow first = new BatchRow("MC_READING_SINGLE", CefrLevel.B2, 12, List.of(), ImageKind.AUTO);
         BatchRow second = new BatchRow("WRITE_ESSAY", CefrLevel.C1, 3, List.of("climate"), ImageKind.AUTO);
         when(validator.validate(request, staff))
@@ -186,6 +192,19 @@ class QuestionGenerationBatchServiceTest {
     }
 
     @Test
+    void asManyChildrenAreClaimableAsGenerationRunsInParallel() {
+        properties.getLimits().setMaxConcurrentJobs(2);
+
+        service.submit(request, staff);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<QuestionGenerationJob>> children = ArgumentCaptor.forClass(List.class);
+        verify(jobs).saveAllAndFlush(children.capture());
+        assertThat(children.getValue()).extracting(QuestionGenerationJob::getStatus)
+                .containsExactly(JobStatus.QUEUED, JobStatus.QUEUED, JobStatus.PENDING);
+    }
+
+    @Test
     void childrenWaitPendingExceptTheFirst() {
         service.submit(request, staff);
 
@@ -220,8 +239,10 @@ class QuestionGenerationBatchServiceTest {
         cancelled.setStatus(JobStatus.CANCELLED);
         when(jobs.findByBatchIdOrderByBatchSeqAsc(40L)).thenReturn(List.of(running, cancelled));
         when(jobs.existsByBatchIdAndStatusIn(eq(40L), any())).thenReturn(true);
+        when(jobs.markCancelling(running.getPublicId())).thenReturn(1);
 
         service.cancel(batch.getPublicId(), staff);
+        verify(events).publishEvent(new GenerationCancelRequested(running.getPublicId()));
 
         InOrder order = inOrder(batches, items, jobs);
         order.verify(batches).findByIdForUpdate(40L);

@@ -1,5 +1,6 @@
 package com.pte.billing.internal.service;
 
+import com.pte.billing.BillingSettingsService;
 import com.pte.billing.TenantApplicationApprovedEvent;
 import com.pte.billing.TenantApplicationRejectedEvent;
 import com.pte.billing.TenantApplicationSubmittedEvent;
@@ -9,6 +10,7 @@ import com.pte.billing.internal.dto.request.application.RejectApplicationRequest
 import com.pte.billing.internal.dto.response.DirectOnboardResponse;
 import com.pte.billing.internal.dto.request.application.SubmitApplicationRequest;
 import com.pte.billing.internal.dto.response.TenantApplicationResponse;
+import com.pte.billing.internal.exception.application.ApplicationEmailAlreadyPendingException;
 import com.pte.billing.internal.exception.application.ApplicationNotPendingException;
 import com.pte.billing.internal.exception.license.RequestedCodeAlreadyUsedException;
 import com.pte.billing.internal.exception.application.RequestedNameAlreadyUsedException;
@@ -30,6 +32,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -44,6 +48,7 @@ public class TenantApplicationService {
     private final TenancyService tenancyService;
     private final IdentityService identityService;
     private final PlatformSettingService platformSettingService;
+    private final BillingSettingsService billingSettingsService;
     private final ApplicationEventPublisher eventPublisher;
     private final AuditLogService auditLogService;
 
@@ -51,12 +56,13 @@ public class TenantApplicationService {
     public TenantApplicationService(
             TenancyService tenancyService, IdentityService identityService,
             PlatformSettingService platformSettingService, ApplicationEventPublisher eventPublisher,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService, BillingSettingsService billingSettingsService) {
         this.tenancyService = tenancyService;
         this.identityService = identityService;
         this.platformSettingService = platformSettingService;
         this.eventPublisher = eventPublisher;
         this.auditLogService = auditLogService;
+        this.billingSettingsService = billingSettingsService;
     }
 
     /**
@@ -71,8 +77,21 @@ public class TenantApplicationService {
         if (tenancyService.existsByCode(request.requestedCode())) {
             throw new RequestedCodeAlreadyUsedException();
         }
-        Organization saved = tenancyService.submitApplication(organizationName, request.orgType(),
-                request.requestedCode(), request.taxCode().trim(), request.contactEmail(), request.contactPhone());
+        String taxCode = request.taxCode().trim();
+        if (tenancyService.existsByTaxCode(taxCode)) {
+            throw new RequestedTaxCodeAlreadyUsedException();
+        }
+        if (tenancyService.hasPendingApplicationForEmail(request.contactEmail().trim())) {
+            throw new ApplicationEmailAlreadyPendingException();
+        }
+        Organization saved;
+        try {
+            saved = tenancyService.submitApplication(organizationName, request.orgType(),
+                    request.requestedCode(), taxCode, request.contactEmail(), request.contactPhone());
+        } catch (DataIntegrityViolationException ex) {
+            // A concurrent submission slipped past the checks above; the unique indexes are the final word.
+            throw translateApprovalConflict(ex);
+        }
         eventPublisher.publishEvent(new TenantApplicationSubmittedEvent(
                 saved.getPublicId(), saved.getName(), saved.getCode(), saved.getContactEmail()));
     }
@@ -99,8 +118,18 @@ public class TenantApplicationService {
     public TenantApplicationResponse get(UUID applicationPublicId, CurrentUser caller) {
         requireOperation(caller, PlatformOperation.APPLICATION_READ, BillingConstants.AUDIT_APPLICATION_READ);
         return tenancyService.findApplication(applicationPublicId)
-                .map(TenantApplicationMapper::toResponse)
+                .map(this::withResponseDeadline)
                 .orElseThrow(TenantApplicationNotFoundException::new);
+    }
+
+    /** A pending application carries the moment its review SLA runs out; reviewed ones have no deadline. */
+    private TenantApplicationResponse withResponseDeadline(Organization application) {
+        if (!application.isPending() || application.getCreatedAt() == null) {
+            return TenantApplicationMapper.toResponse(application);
+        }
+        Instant dueAt = application.getCreatedAt()
+                .plus(Duration.ofHours(billingSettingsService.getTenantApplicationResponseSlaHours()));
+        return TenantApplicationMapper.toResponse(application, dueAt);
     }
 
     /**
@@ -128,6 +157,9 @@ public class TenantApplicationService {
         }
         if (tenancyService.existsByCode(request.code())) {
             throw new RequestedCodeAlreadyUsedException();
+        }
+        if (tenancyService.existsByTaxCode(request.taxCode().trim())) {
+            throw new RequestedTaxCodeAlreadyUsedException();
         }
         Organization application = tenancyService.submitApplication(organizationName, request.organizationType(),
                 request.code(), request.taxCode().trim(), request.hostEmail().trim(), null);
@@ -202,7 +234,7 @@ public class TenantApplicationService {
         if (containsConstraint(ex, "uq_org_name_live")) {
             return new RequestedNameAlreadyUsedException();
         }
-        if (containsConstraint(ex, "uq_org_tax_code_approved")) {
+        if (containsConstraint(ex, "uq_org_tax_code_live")) {
             return new RequestedTaxCodeAlreadyUsedException();
         }
         return ex;

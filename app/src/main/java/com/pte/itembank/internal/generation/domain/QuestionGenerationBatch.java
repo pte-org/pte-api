@@ -67,4 +67,8 @@ public class QuestionGenerationBatch extends BaseEntity {
 
     @Column(name = "finished_at")
     private Instant finishedAt;
+
+    /** When the batch was last paused; null while it runs. */
+    @Column(name = "paused_at")
+    private Instant pausedAt;
 }

@@ -171,7 +171,7 @@ class QuestionGenerationControllerTest {
     void taskTypesAndQuotaAreExposedForTheForm() throws Exception {
         when(queryService.taskTypes(admin)).thenReturn(
                 List.of(new GenerationTaskTypeResponse("MC_READING_SINGLE", "READING", false, false, 45)));
-        when(queryService.quota(admin)).thenReturn(new GenerationQuotaResponse(12, 100, 88, false, QuotaScope.USER, 50));
+        when(queryService.quota(admin)).thenReturn(new GenerationQuotaResponse(12, 100, 88, false, QuotaScope.USER, 50, true));
 
         mvc.perform(get("/api/v1/question-generation/task-types"))
                 .andExpect(status().isOk())
@@ -184,7 +184,8 @@ class QuestionGenerationControllerTest {
                 .andExpect(jsonPath("$.data.remaining").value(88))
                 .andExpect(jsonPath("$.data.unlimited").value(false))
                 .andExpect(jsonPath("$.data.scope").value("USER"))
-                .andExpect(jsonPath("$.data.maxItemsPerBatch").value(50));
+                .andExpect(jsonPath("$.data.maxItemsPerBatch").value(50))
+                .andExpect(jsonPath("$.data.pictureEnabled").value(true));
     }
 
     @Test

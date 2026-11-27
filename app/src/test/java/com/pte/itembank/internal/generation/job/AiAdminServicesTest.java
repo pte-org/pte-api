@@ -122,6 +122,7 @@ class AiAdminServicesTest {
         properties.getLimits().setMaxItemsPerBatch(0);
 
         AiStatusResponse.Limits limits = overview(properties).status().limits();
+        assertThat(limits.maxItemsPerBatch()).isZero();
 
         assertThat(limits.userDailyUnlimited()).isTrue();
         assertThat(limits.globalDailyUnlimited()).isFalse();

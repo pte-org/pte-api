@@ -4,6 +4,8 @@ import com.pte.itembank.internal.generation.config.QuestionGenerationConfig;
 import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
 import com.pte.itembank.internal.generation.live.GenerationLiveContext;
 import com.pte.itembank.internal.generation.live.GenerationLiveFeed;
+import com.pte.itembank.internal.generation.stop.GenerationStop;
+import com.pte.itembank.internal.generation.stop.GenerationStoppedException;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -55,15 +57,29 @@ class NineRouterLlmGatewayStreamTest {
     /** Records what the gateway told the live view, in order. */
     static final class RecordingSink implements TokenSink {
         final List<String> calls = new CopyOnWriteArrayList<>();
+        final List<String> models = new CopyOnWriteArrayList<>();
+        /** What a test does when the call starts or the first text arrives: a pause, for instance. */
+        Runnable onBegin = () -> {
+        };
+        Runnable onText = () -> {
+        };
 
         @Override
-        public void begin() {
+        public void begin(String model) {
             calls.add("begin");
+            models.add(model);
+            onBegin.run();
         }
 
         @Override
         public void accept(String delta) {
             calls.add(delta);
+            onText.run();
+        }
+
+        @Override
+        public void thinking(String delta) {
+            calls.add("thinking:" + delta);
         }
     }
 
@@ -92,6 +108,7 @@ class NineRouterLlmGatewayStreamTest {
 
     @AfterEach
     void stop() {
+        GenerationStop.unbind();
         GenerationLiveContext.close();
         server.stop(0);
         ((java.util.concurrent.ExecutorService) server.getExecutor()).shutdownNow();
@@ -114,7 +131,8 @@ class NineRouterLlmGatewayStreamTest {
         synchronized (replies) {
             replies.addAll(List.of(script));
         }
-        return new QuestionGenerationConfig().nineRouterLlmGateway(properties, JSON, usageRecorder);
+        // No primary provider is set, so the bean is the plain gateway.
+        return (NineRouterLlmGateway) new QuestionGenerationConfig().nineRouterLlmGateway(properties, JSON, usageRecorder);
     }
 
     private static Reply stream() {
@@ -127,7 +145,28 @@ class NineRouterLlmGatewayStreamTest {
 
         assertThat(answer).isEqualTo("{\"topic\":\"Bees\"}");
         assertThat(sink.calls).containsExactly("begin", "{\"topic\":", "\"Bees\"}");
+        assertThat(sink.models).hasSize(1);
         assertThat(JSON.readTree(bodies.get(0)).path("stream").asBoolean()).isTrue();
+    }
+
+    @Test
+    void aReasoningModelsThoughtsGoToTheSinkButNotIntoTheAnswer() {
+        Reply reasoning = new Reply(200, "text/event-stream", """
+                data: {"choices":[{"delta":{"role":"assistant","content":"","reasoning":"Plan the chart."}}]}
+
+                data: {"choices":[{"delta":{"reasoning_content":" Five bars."}}]}
+
+                data: {"choices":[{"delta":{"content":"{\\"a\\":1}"}}]}
+
+                data: [DONE]
+
+                """);
+
+        String answer = gateway(reasoning).completeJson(LlmRole.GENERATOR, "system", "user");
+
+        assertThat(answer).isEqualTo("{\"a\":1}");
+        assertThat(sink.calls).containsExactly("begin", "thinking:Plan the chart.", "thinking: Five bars.",
+                "{\"a\":1}");
     }
 
     @Test
@@ -178,5 +217,31 @@ class NineRouterLlmGatewayStreamTest {
 
         assertThat(JSON.readTree(bodies.get(0)).path("stream").asBoolean()).isFalse();
         assertThat(sink.calls).isEmpty();
+    }
+
+    @Test
+    void aStopWhileTheTextStreamsEndsTheReadAndNoMoreTextReachesTheSink() {
+        GenerationStop stop = new GenerationStop();
+        stop.bind();
+        sink.onText = stop::request; // a pause arrives with the first piece of text
+        NineRouterLlmGateway gateway = gateway(stream());
+
+        assertThatThrownBy(() -> gateway.completeJson(LlmRole.GENERATOR, "system", "user"))
+                .isInstanceOf(GenerationStoppedException.class);
+        assertThat(sink.calls).containsExactly("begin", "{\"topic\":");
+        assertThat(bodies).hasSize(1);
+    }
+
+    @Test
+    void aCallThatFailsAfterAStopIsNotRetried() {
+        GenerationStop stop = new GenerationStop();
+        stop.bind();
+        sink.onBegin = stop::request;
+        NineRouterLlmGateway gateway = gateway(new Reply(503, "application/json", "{\"error\":\"busy\"}"),
+                stream());
+
+        assertThatThrownBy(() -> gateway.completeJson(LlmRole.GENERATOR, "system", "user"))
+                .isInstanceOf(GenerationStoppedException.class);
+        assertThat(bodies).hasSize(1);
     }
 }

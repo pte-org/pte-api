@@ -32,7 +32,20 @@ public record CreateExamDraftRequest(
         LockdownMode lockdownMode,
         @jakarta.validation.Valid List<CefrTargetRequest> cefrTargets,
         /** Prefer questions the centre has not used in its earlier exams; null means no preference. */
-        Boolean avoidRepeatedQuestions) {
+        Boolean avoidRepeatedQuestions,
+        /** Proctors to assign with the draft, all or none; null or empty means assign them later. */
+        @jakarta.validation.Valid @Size(max = 50, message = SessionConstants.PROCTORS_SIZE_INVALID)
+        List<AssignProctorRequest> proctors) {
+
+    /** Constructor for callers that predate picking proctors at creation. */
+    public CreateExamDraftRequest(String name, UUID examDefinitionPublicId, UUID subscriptionPublicId,
+            Instant opensAt, Instant closesAt, ExamMode examMode, ReusePolicy reusePolicy, String seriesKey,
+            Integer capacity, List<String> selectedSkills, Integer maxRetriesPerStudent,
+            LockdownMode lockdownMode, List<CefrTargetRequest> cefrTargets, Boolean avoidRepeatedQuestions) {
+        this(name, examDefinitionPublicId, subscriptionPublicId, opensAt, closesAt, examMode, reusePolicy,
+                seriesKey, capacity, selectedSkills, maxRetriesPerStudent, lockdownMode, cefrTargets,
+                avoidRepeatedQuestions, null);
+    }
 
     /** Constructor for callers that predate the repeat preference. */
     public CreateExamDraftRequest(String name, UUID examDefinitionPublicId, UUID subscriptionPublicId,

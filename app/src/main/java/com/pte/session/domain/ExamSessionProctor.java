@@ -1,11 +1,8 @@
 package com.pte.session.domain;
 
-import com.pte.session.domain.enums.ProctorRole;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
@@ -39,8 +36,4 @@ public class ExamSessionProctor extends BaseEntity {
 
     @Column(nullable = false)
     private UUID tenantId;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "role")
-    private ProctorRole role = ProctorRole.ASSISTANT_PROCTOR;
 }

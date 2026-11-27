@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.generation.batch;
 
+import com.pte.itembank.internal.generation.constant.BatchGenerationConstants;
 import com.pte.billing.BillingSettingsService;
 import com.pte.itembank.domain.enums.PteTaskType;
 import com.pte.itembank.domain.enums.QuestionPool;
@@ -125,7 +126,7 @@ class BatchRequestValidatorTest {
                 .isEqualTo("GENERATION_BATCH_ROWS_OUT_OF_RANGE");
         assertThat(codeOf(() -> validator.validate(request(row(1, null), null), staff)))
                 .isEqualTo("GENERATION_BATCH_ROWS_OUT_OF_RANGE");
-        List<Row> many = new ArrayList<>(Collections.nCopies(21, row(1, null)));
+        List<Row> many = new ArrayList<>(Collections.nCopies(BatchGenerationConstants.MAX_ROWS_PER_BATCH + 1, row(1, null)));
         assertThat(codeOf(() -> validator.validate(new SubmitGenerationBatchRequest("PRACTICE", many), staff)))
                 .isEqualTo("GENERATION_BATCH_ROWS_OUT_OF_RANGE");
     }

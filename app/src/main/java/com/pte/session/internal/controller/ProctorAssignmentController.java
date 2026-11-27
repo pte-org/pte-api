@@ -1,7 +1,6 @@
 package com.pte.session.internal.controller;
 
 import com.pte.session.internal.dto.request.AssignProctorRequest;
-import com.pte.session.internal.dto.request.UpdateProctorRoleRequest;
 import com.pte.session.internal.dto.response.proctor.ProctorAssignmentResponse;
 import com.pte.session.internal.service.staff.ProctorAssignmentService;
 import com.pte.shared.security.CurrentUser;
@@ -11,7 +10,6 @@ import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -41,14 +39,6 @@ public class ProctorAssignmentController {
     @GetMapping
     public ApiResponse<List<ProctorAssignmentResponse>> list(@PathVariable UUID sessionPublicId) {
         return ApiResponse.success(proctorService.listProctors(sessionPublicId, currentUser()));
-    }
-
-    @PatchMapping("/{assignmentPublicId}")
-    public ApiResponse<ProctorAssignmentResponse> updateRole(@PathVariable UUID sessionPublicId,
-                                                              @PathVariable UUID assignmentPublicId,
-                                                              @Valid @RequestBody UpdateProctorRoleRequest request) {
-        return ApiResponse.success(
-                proctorService.updateProctorRole(sessionPublicId, assignmentPublicId, request, currentUser()));
     }
 
     @DeleteMapping("/{assignmentPublicId}")

@@ -63,7 +63,7 @@ class ExamDefinitionAdminServiceTest {
     /** The full constructor with a rubric pin port: every created or cloned draft pins {@link #ACTIVE_RUBRIC}. */
     private ExamDefinitionAdminService pinned(QuestionTypeService questionTypes, AuditLogService audit) {
         return new ExamDefinitionAdminService(repository, questionTypes, null, audit, null, null, null,
-                com.pte.TestClocks.fixed(), null, () -> Optional.of(ACTIVE_RUBRIC));
+                com.pte.TestClocks.fixed(), null, () -> Optional.of(ACTIVE_RUBRIC), null);
     }
 
     /** 22 items covering every required task type + every skill weight, valid per FR-05. */

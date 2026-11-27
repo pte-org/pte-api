@@ -248,7 +248,7 @@ class IdentityServiceTest {
 
         HostAdminCreated created = service.createHostAdmin(tenantId, "acme", "contact@acme.example");
 
-        assertThat(created.user().getUsername()).matches("acme\\.[a-hj-km-np-z2-9]{8}");
+        assertThat(created.user().getUsername()).isEqualTo("acme.contact");
         assertThat(created.user().getEmail()).isEqualTo("contact@acme.example");
         assertThat(created.generatedPassword()).isNotBlank();
         assertThat(passwordEncoder.matches(created.generatedPassword(), created.user().getCredentialHash())).isTrue();

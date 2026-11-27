@@ -1,8 +1,11 @@
 package com.pte.practice.internal.domain;
 
+import com.pte.practice.internal.domain.enums.PracticeAvatarGender;
 import com.pte.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import lombok.Getter;
@@ -30,6 +33,11 @@ public class PracticeStudentProfile extends BaseEntity {
 
     @Column(name = "exam_date")
     private LocalDate examDate;
+
+    /** Null until the student picks one; the app then shows its default avatar. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender", length = 16)
+    private PracticeAvatarGender gender;
 
     @Version
     private Long version;

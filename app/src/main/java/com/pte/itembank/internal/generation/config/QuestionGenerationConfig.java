@@ -1,6 +1,9 @@
 package com.pte.itembank.internal.generation.config;
 
+import com.pte.billing.QuestionGenerationLimit;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
+import com.pte.itembank.internal.generation.llm.FallbackLlmGateway;
+import com.pte.itembank.internal.generation.llm.LlmGateway;
 import com.pte.itembank.internal.generation.llm.NineRouterLlmGateway;
 import com.pte.itembank.internal.generation.usage.GenerationUsageRecorder;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -30,12 +33,24 @@ public class QuestionGenerationConfig {
         return new QuestionGenerationPropertiesValidator(properties, environment);
     }
 
-    /** Present only when generation is on and the stub is not: the real 9router transport. */
+    /**
+     * Present only when generation is on and the stub is not: the real transport. With a primary provider set, it is
+     * asked first and the usual gateway (9router) answers when it fails.
+     */
     @Bean
     @ConditionalOnExpression("${itembank.generation.enabled:false} and !${itembank.generation.stub:false}")
-    public NineRouterLlmGateway nineRouterLlmGateway(QuestionGenerationProperties properties, JsonMapper jsonMapper,
-                                                     GenerationUsageRecorder usageRecorder) {
-        QuestionGenerationProperties.Llm llm = properties.getLlm();
+    public LlmGateway nineRouterLlmGateway(QuestionGenerationProperties properties, JsonMapper jsonMapper,
+                                           GenerationUsageRecorder usageRecorder) {
+        LlmGateway usual = gatewayFor(properties.getLlm(), jsonMapper, usageRecorder);
+        QuestionGenerationProperties.Llm primary = properties.getPrimary();
+        if (primary.getBaseUrl() == null || primary.getBaseUrl().isBlank()) {
+            return usual;
+        }
+        return new FallbackLlmGateway(gatewayFor(primary, jsonMapper, usageRecorder), usual);
+    }
+
+    private static NineRouterLlmGateway gatewayFor(QuestionGenerationProperties.Llm llm, JsonMapper jsonMapper,
+                                                   GenerationUsageRecorder usageRecorder) {
         // Redirects are never followed: a 3xx must not carry the bearer key to another host.
         HttpClient httpClient = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -48,16 +63,22 @@ public class QuestionGenerationConfig {
                 .requestFactory(requestFactory)
                 .defaultHeader(HttpHeaders.AUTHORIZATION, BEARER + llm.getApiKey())
                 .build();
-        return new NineRouterLlmGateway(restClient, properties, jsonMapper, usageRecorder);
+        return new NineRouterLlmGateway(restClient, llm, jsonMapper, usageRecorder);
     }
 
-    /** A dedicated single thread: a job runs for minutes and must not block the shared one-thread scheduler. */
+    /**
+     * Dedicated threads, so a job that runs for minutes never blocks the shared scheduler. Sized for the highest
+     * parallel-run setting; the setting in force (checked when a job is claimed) decides how many actually run, and
+     * idle threads time out.
+     */
     @Bean(name = QuestionGenerationConstants.EXECUTOR_NAME, destroyMethod = "shutdown")
     @ConditionalOnProperty(prefix = "itembank.generation", name = "enabled", havingValue = "true")
     ThreadPoolTaskExecutor questionGenerationExecutor() {
+        int threads = QuestionGenerationLimit.CONCURRENT_JOBS.maximum();
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(1);
-        executor.setMaxPoolSize(1);
+        executor.setCorePoolSize(threads);
+        executor.setMaxPoolSize(threads);
+        executor.setAllowCoreThreadTimeOut(true);
         executor.setQueueCapacity(0);
         executor.setThreadNamePrefix(QuestionGenerationConstants.EXECUTOR_THREAD_PREFIX);
         return executor;

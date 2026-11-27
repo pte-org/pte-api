@@ -1,8 +1,10 @@
 package com.pte.assessment.internal.service;
 
 import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.CefrTargetResponse;
 import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
+import com.pte.assessment.dto.response.GenerationCefrMixResponse;
 import com.pte.assessment.dto.response.GenerationPresetResponse;
 import org.junit.jupiter.api.Test;
 
@@ -68,5 +70,37 @@ class GenerationPresetQueryServiceTest {
         when(examDefinitions.findActive()).thenReturn(Optional.empty());
 
         assertThat(service.listActivePresets()).isEmpty();
+    }
+
+    private void activeMix(List<CefrTargetResponse> targets) {
+        ExamDefinitionResponse template = mock(ExamDefinitionResponse.class);
+        when(template.name()).thenReturn("PTE 22 task type");
+        when(template.version()).thenReturn(5);
+        when(template.cefrTargets()).thenReturn(targets);
+        when(examDefinitions.findActive()).thenReturn(Optional.of(template));
+    }
+
+    @Test
+    void theCefrMixNamesItsTemplateAndListsLevelsLowestFirstWithoutEmptyShares() {
+        activeMix(List.of(new CefrTargetResponse("C2", 25), new CefrTargetResponse("B1", 25),
+                new CefrTargetResponse("A2", 0), new CefrTargetResponse("C1", 25), new CefrTargetResponse("B2", 25)));
+
+        assertThat(service.findActiveCefrMix()).contains(new GenerationCefrMixResponse("PTE 22 task type", 5,
+                List.of(new CefrTargetResponse("B1", 25), new CefrTargetResponse("B2", 25),
+                        new CefrTargetResponse("C1", 25), new CefrTargetResponse("C2", 25))));
+    }
+
+    @Test
+    void aTemplateWithoutACefrMixGivesNone() {
+        activeMix(List.of());
+
+        assertThat(service.findActiveCefrMix()).isEmpty();
+    }
+
+    @Test
+    void noActiveTemplateGivesNoCefrMix() {
+        when(examDefinitions.findActive()).thenReturn(Optional.empty());
+
+        assertThat(service.findActiveCefrMix()).isEmpty();
     }
 }

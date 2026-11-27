@@ -92,6 +92,47 @@ class ExamIncidentCommandServiceTest {
     }
 
     @Test
+    void createIncident_isRefusedForTheProctorOnceTheSessionHasClosed() {
+        UUID proctorId = UUID.randomUUID();
+        CurrentUser proctor = new CurrentUser(proctorId, tenantId, List.of("PROCTOR"));
+        when(sessionService.isProctorAssignedToSession(sessionId, proctorId, tenantId)).thenReturn(true);
+        when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.createIncident(sessionId,
+                new CreateIncidentRequest("Noise", "Loud noise", "environment", "high", null, null), proctor))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("after the exam session has closed");
+
+        verify(incidentRepository, never()).save(any(ExamIncident.class));
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    void createIncident_isStillAllowedForAProctorWhileTheSessionIsNotClosed() {
+        UUID proctorId = UUID.randomUUID();
+        CurrentUser proctor = new CurrentUser(proctorId, tenantId, List.of("PROCTOR"));
+        when(sessionService.isProctorAssignedToSession(sessionId, proctorId, tenantId)).thenReturn(true);
+        when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(false);
+
+        service.createIncident(sessionId,
+                new CreateIncidentRequest("Noise", "Loud noise", "environment", "high", null, null), proctor);
+
+        verify(incidentRepository).save(any(ExamIncident.class));
+    }
+
+    @Test
+    void createIncident_isRefusedForTheHostOnceTheSessionHasClosed() {
+        when(sessionService.isSessionClosed(sessionId, tenantId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.createIncident(sessionId,
+                new CreateIncidentRequest("Noise", "Loud noise", "environment", "high", null, null), host))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("after the exam session has closed");
+
+        verify(incidentRepository, never()).save(any(ExamIncident.class));
+    }
+
+    @Test
     void updateIncidentStatus_changesTheStatusAndWritesTheStatusHistoryStep() {
         ExamIncident incident = existing("NEW");
         when(incidentRepository.findByPublicIdAndSessionPublicIdAndTenantIdAndOriginAndDeletedFalse(

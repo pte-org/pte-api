@@ -6,7 +6,7 @@ public interface TokenSink {
     /** Nobody watches: the gateway reads the whole answer at once. */
     TokenSink NONE = new TokenSink() {
         @Override
-        public void begin() {
+        public void begin(String model) {
         }
 
         @Override
@@ -14,8 +14,18 @@ public interface TokenSink {
         }
     };
 
-    /** A new call (or a retry of one) starts: what was written before is no longer the answer. */
-    void begin();
+    /**
+     * A new call (or a retry of one) starts: what was written before is no longer the answer. {@code model} is the
+     * model that answers it (a fallback provider answers with its own).
+     */
+    void begin(String model);
 
     void accept(String delta);
+
+    /**
+     * A piece of what the model thinks before (or while) it writes the answer, for a model that streams its reasoning.
+     * It is never part of the answer; by default nobody reads it.
+     */
+    default void thinking(String delta) {
+    }
 }

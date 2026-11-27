@@ -2,6 +2,7 @@ package com.pte.scoring.internal.rubric.service;
 
 import com.pte.assessment.ExamDefinitionService;
 import com.pte.scoring.RubricTraceService;
+import com.pte.scoring.domain.ScoringDomainConstants;
 import com.pte.scoring.domain.ScoringRubricVersion;
 import com.pte.scoring.domain.ScoringRubricVersion.RubricVersionStatus;
 import com.pte.scoring.dto.response.ItemScoreTraceView;
@@ -125,6 +126,19 @@ class RubricRescoreServiceTest {
         assertThat(traces.get(objective.answerPublicId()).objectiveRuleCode()).isNotBlank();
         assertThat(traces.values()).filteredOn(view -> view.kind() != ItemTraceKind.RUBRIC)
                 .allSatisfy(view -> assertThat(view.trace()).isNull());
+    }
+
+    @Test
+    void aBlankAnswerScoredZeroIsExplainedAsBlankNotAsLegacyData() {
+        ReportScoringAnswerView blank = new ReportScoringAnswerView(UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), DI, "SPEAKING", "AI_SPEECH", 0, "REAL",
+                ScoringDomainConstants.AI_BLANK_ANSWER_PROVIDER, null, null, null, "AI", 0, true, null, 0, 0,
+                Map.of(), null, null);
+
+        ItemScoreTraceView view = service.traceItems(List.of(blank)).get(blank.answerPublicId());
+
+        assertThat(view.kind()).isEqualTo(ItemTraceKind.BLANK_ANSWER);
+        assertThat(view.trace()).isNull();
     }
 
     @Test

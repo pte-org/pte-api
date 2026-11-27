@@ -8,15 +8,19 @@ import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.domain.JobStatus;
+import com.pte.itembank.internal.generation.domain.QuestionGenerationBatch;
 import com.pte.itembank.internal.generation.domain.QuestionGenerationJob;
+import com.pte.itembank.internal.generation.media.BatchPosition;
 import com.pte.itembank.internal.generation.pipeline.JobClaim;
 import com.pte.itembank.internal.generation.repository.GenerationBatchRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import java.time.Clock;
+import java.util.Collection;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -146,6 +150,70 @@ class JobLeaseServiceTest {
     }
 
     @Test
+    void aBatchChildCarriesItsPlaceAmongTheBatchsSpokenQuestions() {
+        UUID batchPublicId = UUID.randomUUID();
+        QuestionGenerationBatch batch = new QuestionGenerationBatch();
+        batch.setId(40L);
+        batch.setPublicId(batchPublicId);
+        when(batches.findById(40L)).thenReturn(Optional.of(batch));
+        when(jobs.sumRequestedCountBefore(eq(40L), eq(2), any())).thenReturn(8L);
+        QuestionGenerationJob child = job(JobStatus.QUEUED);
+        child.setBatchId(40L);
+        child.setBatchSeq(2);
+        queued(child, 40L);
+
+        BatchPosition position = service.claimNext("worker-1").orElseThrow().batchPosition();
+
+        assertThat(position.offset()).isEqualTo(8);
+        assertThat(position.seed()).isEqualTo(batchPublicId.getLeastSignificantBits());
+    }
+
+    @Test
+    void aResumedBatchChildKeepsItsPlace() {
+        QuestionGenerationBatch batch = new QuestionGenerationBatch();
+        batch.setId(40L);
+        batch.setPublicId(UUID.randomUUID());
+        when(batches.findById(40L)).thenReturn(Optional.of(batch));
+        when(jobs.sumRequestedCountBefore(eq(40L), eq(3), any())).thenReturn(11L);
+        QuestionGenerationJob running = job(JobStatus.RUNNING);
+        running.setBatchId(40L);
+        running.setBatchSeq(3);
+        when(jobs.findNextResumable(NOW)).thenReturn(List.of(5L));
+        when(jobs.findBatchIdById(5L)).thenReturn(List.of(40L));
+        when(jobs.findById(5L)).thenReturn(Optional.of(running));
+        when(jobs.markRunning(eq(5L), any(), any(), any())).thenReturn(1);
+
+        assertThat(service.claimNext("worker-2").orElseThrow().batchPosition().offset()).isEqualTo(11);
+    }
+
+    @Test
+    void onlyTaskTypesThatAreSpokenTakeAPlaceInTheSequence() {
+        QuestionGenerationBatch batch = new QuestionGenerationBatch();
+        batch.setId(40L);
+        batch.setPublicId(UUID.randomUUID());
+        when(batches.findById(40L)).thenReturn(Optional.of(batch));
+        QuestionGenerationJob child = job(JobStatus.QUEUED);
+        child.setBatchId(40L);
+        child.setBatchSeq(1);
+        queued(child, 40L);
+
+        service.claimNext("worker-1");
+
+        ArgumentCaptor<Collection<String>> keys = ArgumentCaptor.captor();
+        verify(jobs).sumRequestedCountBefore(eq(40L), eq(1), keys.capture());
+        assertThat(keys.getValue()).contains("REPEAT_SENTENCE", "RE_TELL_LECTURE")
+                .doesNotContain("MC_READING_SINGLE", "DESCRIBE_IMAGE", "READ_ALOUD");
+    }
+
+    @Test
+    void aJobOutsideAnyBatchHasNoPlace() {
+        QuestionGenerationJob standalone = job(JobStatus.QUEUED);
+        queued(standalone, null);
+
+        assertThat(service.claimNext("worker-1").orElseThrow().batchPosition()).isNull();
+    }
+
+    @Test
     void aCancelThatWonSinceTheSelectLeavesNothingClaimed() {
         QuestionGenerationJob child = job(JobStatus.QUEUED);
         queued(child, 40L);
@@ -202,6 +270,9 @@ class JobLeaseServiceTest {
 
         when(jobs.statusIfLeaseHeld(5L, "worker-1")).thenReturn(List.of(JobStatus.CANCELLING));
         assertThat(service.leaseState(claim)).isEqualTo(LeaseState.CANCEL_REQUESTED);
+
+        when(jobs.statusIfLeaseHeld(5L, "worker-1")).thenReturn(List.of(JobStatus.PAUSING));
+        assertThat(service.leaseState(claim)).isEqualTo(LeaseState.PAUSE_REQUESTED);
 
         when(jobs.statusIfLeaseHeld(5L, "worker-1")).thenReturn(List.of());
         assertThat(service.leaseState(claim)).isEqualTo(LeaseState.LOST);
@@ -299,5 +370,44 @@ class JobLeaseServiceTest {
         order.verify(batches).findByIdForUpdate(40L);
         order.verify(jobs).finishStaleCancelling(5L, NOW);
         order.verify(chaining).onChildTerminal(40L, 5L);
+    }
+
+    @Test
+    void aReleasedPausedChildRequeuesItsQuestionsAndLetsItsBatchSettle() {
+        when(jobs.findBatchIdById(5L)).thenReturn(List.of(40L));
+        when(jobs.release(5L, "worker-1")).thenReturn(1);
+
+        service.release(claim);
+
+        InOrder order = inOrder(batches, items, jobs, chaining);
+        order.verify(batches).findByIdForUpdate(40L);
+        order.verify(items).requeueOpen(5L, NOW);
+        order.verify(jobs).release(5L, "worker-1");
+        order.verify(chaining).onChildPaused(40L);
+        verify(jobs, never()).finish(anyLong(), any(), any(), any(), any());
+    }
+
+    @Test
+    void aReleaseThatLostItsLeaseLeavesTheBatchAlone() {
+        when(jobs.findBatchIdById(5L)).thenReturn(List.of(40L));
+        when(jobs.release(5L, "worker-1")).thenReturn(0);
+
+        service.release(claim);
+
+        verify(chaining, never()).onChildPaused(anyLong());
+    }
+
+    @Test
+    void aPauseWhoseWorkerDiedGoesBackToWaitingNotRunning() {
+        when(jobs.findNextResumable(NOW)).thenReturn(List.of(5L));
+        when(jobs.findById(5L)).thenReturn(Optional.of(job(JobStatus.PAUSING)));
+        when(jobs.findBatchIdById(5L)).thenReturn(List.of(40L));
+        when(jobs.releaseStalePausing(5L)).thenReturn(1);
+
+        assertThat(service.claimNext("worker-2")).isEmpty();
+
+        verify(items).requeueOpen(5L, NOW);
+        verify(chaining).onChildPaused(40L);
+        verify(jobs, never()).markRunning(anyLong(), any(), any(), any());
     }
 }

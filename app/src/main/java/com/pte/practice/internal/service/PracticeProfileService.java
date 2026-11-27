@@ -2,6 +2,7 @@ package com.pte.practice.internal.service;
 
 import com.pte.practice.internal.constant.PracticeConstants;
 import com.pte.practice.internal.domain.PracticeStudentProfile;
+import com.pte.practice.internal.dto.request.PracticeAvatarUpdateRequest;
 import com.pte.practice.internal.dto.request.PracticeProfileUpdateRequest;
 import com.pte.practice.internal.dto.response.profile.PracticeProfileResponse;
 import com.pte.practice.internal.exception.PracticeProfileException;
@@ -41,18 +42,18 @@ public class PracticeProfileService {
     public PracticeProfileResponse get(CurrentUser caller) {
         entitlementService.assertUnlocked(caller, caller != null ? caller.tenantId() : null);
         if (caller == null || caller.userId() == null) {
-            return new PracticeProfileResponse(null);
+            return new PracticeProfileResponse(null, null);
         }
         return profileRepository.findByStudentPublicIdAndDeletedFalse(caller.userId())
-                .map(profile -> new PracticeProfileResponse(profile.getExamDate()))
-                .orElseGet(() -> new PracticeProfileResponse(null));
+                .map(profile -> new PracticeProfileResponse(profile.getExamDate(), profile.getGender()))
+                .orElseGet(() -> new PracticeProfileResponse(null, null));
     }
 
     @Transactional
     public PracticeProfileResponse update(CurrentUser caller, PracticeProfileUpdateRequest request) {
         entitlementService.assertUnlocked(caller, caller != null ? caller.tenantId() : null);
         if (caller == null || caller.userId() == null) {
-            return new PracticeProfileResponse(null);
+            return new PracticeProfileResponse(null, null);
         }
 
         LocalDate examDate = request != null ? request.examDate() : null;
@@ -86,6 +87,36 @@ public class PracticeProfileService {
             profile = profileRepository.save(profile);
         }
 
-        return new PracticeProfileResponse(profile.getExamDate());
+        return new PracticeProfileResponse(profile.getExamDate(), profile.getGender());
+    }
+
+    /**
+     * Saves the avatar and nothing else: it reads the profile, sets the one field and writes it back, so the exam
+     * date is carried through untouched. It is its own method, apart from {@link #update}, on purpose.
+     */
+    @Transactional
+    public PracticeProfileResponse updateAvatar(CurrentUser caller, PracticeAvatarUpdateRequest request) {
+        entitlementService.assertUnlocked(caller, caller != null ? caller.tenantId() : null);
+        if (caller == null || caller.userId() == null) {
+            return new PracticeProfileResponse(null, null);
+        }
+        PracticeStudentProfile profile = profileRepository.findByStudentPublicIdAndDeletedFalse(caller.userId())
+                .orElseGet(() -> {
+                    PracticeStudentProfile newProfile = new PracticeStudentProfile();
+                    newProfile.setStudentPublicId(caller.userId());
+                    newProfile.setTenantId(caller.tenantId());
+                    return newProfile;
+                });
+        profile.setGender(request.gender());
+        try {
+            profile = profileRepository.saveAndFlush(profile);
+        } catch (DataIntegrityViolationException ex) {
+            // Two first saves raced: the other one created the row, so set the avatar on that one.
+            profile = profileRepository.findByStudentPublicIdAndDeletedFalse(caller.userId())
+                    .orElseThrow(() -> ex);
+            profile.setGender(request.gender());
+            profile = profileRepository.save(profile);
+        }
+        return new PracticeProfileResponse(profile.getExamDate(), profile.getGender());
     }
 }

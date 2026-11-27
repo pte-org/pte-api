@@ -19,6 +19,8 @@ import java.util.regex.Pattern;
  */
 class RosterRowValidator {
 
+    private static final int MIN_STUDENT_AGE_YEARS = 6;
+    private static final int MAX_STUDENT_AGE_YEARS = 120;
     private static final Pattern EMAIL = Pattern.compile(IdentityConstants.ROSTER_EMAIL_PATTERN);
     private static final Pattern PHONE = Pattern.compile(IdentityConstants.ROSTER_PHONE_PATTERN);
 
@@ -32,6 +34,8 @@ class RosterRowValidator {
         List<RosterRowError> errors = new ArrayList<>();
         Set<String> seenEmails = new HashSet<>();
         LocalDate today = LocalDate.now(clock);
+        LocalDate maxAllowedDob = today.minusYears(MIN_STUDENT_AGE_YEARS);
+        LocalDate minAllowedDob = today.minusYears(MAX_STUDENT_AGE_YEARS);
         for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
             BulkCreateUserRow row = rows.get(rowIndex);
             validateEmail(rowIndex, row.email(), seenEmails, errors);
@@ -41,7 +45,8 @@ class RosterRowValidator {
             validateLength(rowIndex, row.className(), IdentityConstants.ROSTER_MAX_CLASS_NAME_LENGTH,
                     IdentityConstants.ROSTER_FIELD_CLASS_NAME, IdentityConstants.ROSTER_CLASS_NAME_TOO_LONG, errors);
             validatePhone(rowIndex, row.phone(), errors);
-            if (row.dateOfBirth() != null && !row.dateOfBirth().isBefore(today)) {
+            if (row.dateOfBirth() != null
+                    && (row.dateOfBirth().isAfter(maxAllowedDob) || row.dateOfBirth().isBefore(minAllowedDob))) {
                 errors.add(new RosterRowError(rowIndex, IdentityConstants.ROSTER_FIELD_DATE_OF_BIRTH,
                         IdentityConstants.ROSTER_DATE_OF_BIRTH_INVALID));
             }

@@ -33,7 +33,6 @@ class ExaminerTraitCommandFixture {
     final GradingAssignmentRepository assignments = mock(GradingAssignmentRepository.class);
     final AiEvaluationRepository answers = mock(AiEvaluationRepository.class);
     final ExaminerEvaluationRepository scores = mock(ExaminerEvaluationRepository.class);
-    final GradingIssueRepository issues = mock(GradingIssueRepository.class);
     final SessionGradingGateway gateway = mock(SessionGradingGateway.class);
     final AttemptService attempts = mock(AttemptService.class);
     final AnswerContentReader content = mock(AnswerContentReader.class);
@@ -81,7 +80,7 @@ class ExaminerTraitCommandFixture {
         when(idempotency.begin(any(), any(), any(), any(), any())).thenReturn(new IdempotencyDecision(IdempotencyOutcome.NEW, null));
         var recorder = new ExaminerWorkRecorder(idempotency, mock(AuditLogChangeWriter.class), mock(AuditHistoryReader.class), json);
         finalize = new ExaminerFinalizeSubmitter(scores, versions, attempts, traits, freshness);
-        drafts = new ExaminerDraftCommandService(sessions, assignments, issues, scores, answers, gateway, attempts, eligibility,
+        drafts = new ExaminerDraftCommandService(sessions, assignments, scores, answers, gateway, attempts, eligibility,
                 workflow, versions, recorder, finalize, mock(org.springframework.context.ApplicationEventPublisher.class), traits,
                 new ExaminerTraitResponses(json), freshness, com.pte.TestClocks.fixed());
         direct = new ExaminerDirectScoreSubmitter(assignments, answers, scores, gateway, eligibility, content, attempts,

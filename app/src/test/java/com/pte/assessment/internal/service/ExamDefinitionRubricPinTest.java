@@ -110,7 +110,7 @@ class ExamDefinitionRubricPinTest {
 
     private ExamDefinitionAdminService service(ActiveRubricVersionPin pin) {
         return new ExamDefinitionAdminService(repository, null, null, null, null, null, null,
-                com.pte.TestClocks.fixed(), null, pin);
+                com.pte.TestClocks.fixed(), null, pin, null);
     }
 
     static void assertNoActiveRubric(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {

@@ -61,7 +61,7 @@ class BlueprintServiceLifecycleTest {
     @BeforeEach
     void setUp() {
         service = new BlueprintService(blueprintRepository, new AssessmentAccessPolicy(), itembankService,
-                examDefinitionService, snapshotPublishService, null);
+                examDefinitionService, snapshotPublishService, null, null);
         author = new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_STAFF"));
         manager = new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_MANAGER"));
         operator = new CurrentUser(UUID.randomUUID(), null, List.of("PLATFORM_MANAGER"));

@@ -7,6 +7,8 @@ import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants
 import com.pte.itembank.internal.generation.domain.JobStatus;
 import com.pte.itembank.internal.generation.domain.QuestionGenerationJob;
 import com.pte.itembank.internal.generation.pipeline.JobClaim;
+import com.pte.itembank.domain.enums.PteTaskType;
+import com.pte.itembank.internal.generation.media.BatchPosition;
 import com.pte.itembank.internal.generation.repository.GenerationBatchRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
@@ -16,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,6 +28,10 @@ import java.util.Optional;
  */
 @Service
 public class JobLeaseService {
+
+    /** The task types whose questions are spoken: only they take a place in the batch's sequence of voices. */
+    private static final List<String> SPOKEN_TASK_TYPES = Arrays.stream(PteTaskType.values())
+            .filter(PteTaskType::requiresAudioPrompt).map(Enum::name).toList();
 
     private final GenerationJobRepository jobs;
     private final GenerationJobItemRepository items;
@@ -91,7 +98,25 @@ public class JobLeaseService {
         if (held.isEmpty()) {
             return LeaseState.LOST;
         }
-        return held.get(0) == JobStatus.CANCELLING ? LeaseState.CANCEL_REQUESTED : LeaseState.HELD;
+        return switch (held.get(0)) {
+            case CANCELLING -> LeaseState.CANCEL_REQUESTED;
+            case PAUSING -> LeaseState.PAUSE_REQUESTED;
+            default -> LeaseState.HELD;
+        };
+    }
+
+    /**
+     * Hands a paused job back: its unfinished questions start over later (QUEUED), the job waits again (PENDING)
+     * without a lease, and its batch becomes PAUSED once no child holds a lease. Batch row first, like finish.
+     */
+    @Transactional
+    public void release(JobClaim claim) {
+        Long batchId = lockBatchOf(claim.jobId());
+        items.requeueOpen(claim.jobId(), clock.instant());
+        jobs.refreshCounters(claim.jobId());
+        if (jobs.release(claim.jobId(), claim.workerId()) == 1 && batchId != null) {
+            chaining.onChildPaused(batchId);
+        }
     }
 
     /**
@@ -130,6 +155,15 @@ public class JobLeaseService {
             }
             return Optional.empty();
         }
+        if (job.getStatus() == JobStatus.PAUSING) {
+            // A pause whose worker died: nobody is left to stop the job, so it goes back to waiting.
+            Long batchId = lockBatchOf(jobId);
+            items.requeueOpen(jobId, now);
+            if (jobs.releaseStalePausing(jobId) == 1 && batchId != null) {
+                chaining.onChildPaused(batchId);
+            }
+            return Optional.empty();
+        }
         if (jobs.markRunning(job.getId(), workerId, leaseEnd(now), now) == 0) {
             return Optional.empty();
         }
@@ -149,10 +183,25 @@ public class JobLeaseService {
         return batchId;
     }
 
-    private static JobClaim claimOf(QuestionGenerationJob job, String workerId) {
+    private JobClaim claimOf(QuestionGenerationJob job, String workerId) {
         return new JobClaim(job.getId(), job.getPublicId(), job.getRequestedByUserPublicId(), job.getTaskTypeKey(),
                 job.getCefrLevel(), job.getPool(), job.getTopicHint(), workerId, job.isSaveQuestions(),
-                job.getImageKind());
+                job.getImageKind(), batchPositionOf(job));
+    }
+
+    /**
+     * Where the job's questions stand among the batch's spoken questions (null for a job outside a batch). Counted from
+     * the requested counts and sequence numbers, which are fixed when the job is created, so a job that runs again
+     * gets the same position and the same voice.
+     */
+    private BatchPosition batchPositionOf(QuestionGenerationJob job) {
+        if (job.getBatchId() == null || job.getBatchSeq() == null) {
+            return null;
+        }
+        return batches.findById(job.getBatchId())
+                .map(batch -> new BatchPosition(batch.getPublicId().getLeastSignificantBits(),
+                        (int) jobs.sumRequestedCountBefore(job.getBatchId(), job.getBatchSeq(), SPOKEN_TASK_TYPES)))
+                .orElse(null);
     }
 
     private Instant leaseEnd(Instant now) {

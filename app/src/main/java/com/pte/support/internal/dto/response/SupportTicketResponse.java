@@ -12,6 +12,8 @@ public record SupportTicketResponse(
         UUID publicId,
         UUID tenantId,
         UUID submitterUserPublicId,
+        /** Display name of the submitter, or null when the account no longer exists. */
+        String submitterName,
         TicketCategory category,
         String description,
         TicketStatus status,
@@ -19,6 +21,8 @@ public record SupportTicketResponse(
         String entityId,
         Instant createdAt,
         Instant updatedAt,
-        List<SupportTicketNoteResponse> notes
+        List<SupportTicketNoteResponse> notes,
+        /** Description of the linked entity; null when the ticket links nothing or the entity is gone. */
+        TicketEntityContext entityContext
 ) {
 }

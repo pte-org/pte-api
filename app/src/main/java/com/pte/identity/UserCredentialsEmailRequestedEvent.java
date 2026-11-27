@@ -15,5 +15,18 @@ public record UserCredentialsEmailRequestedEvent(
         String username,
         String email,
         String fullName,
-        String temporaryPassword) {
+        String temporaryPassword,
+        String roleLabel,
+        boolean newAccount) {
+
+    public UserCredentialsEmailRequestedEvent(
+            UUID requestId,
+            UUID userPublicId,
+            UUID tenantId,
+            String username,
+            String email,
+            String fullName,
+            String temporaryPassword) {
+        this(requestId, userPublicId, tenantId, username, email, fullName, temporaryPassword, null, false);
+    }
 }

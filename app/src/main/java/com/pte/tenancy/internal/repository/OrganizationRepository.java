@@ -35,11 +35,16 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
 
     boolean existsByTaxCodeAndStatusNot(String taxCode, OrganizationStatus status);
 
+    boolean existsByContactEmailIgnoreCaseAndStatus(String contactEmail, OrganizationStatus status);
+
     boolean existsByTaxCodeAndStatusInAndPublicIdNot(String taxCode, Collection<OrganizationStatus> statuses,
             UUID excludedPublicId);
 
     @Query("select o.organizationType from Organization o where o.publicId = :organizationId")
     Optional<String> findOrganizationTypeByPublicId(@Param("organizationId") UUID organizationId);
+
+    @Query("select o.name from Organization o where o.publicId = :organizationId")
+    Optional<String> findOrganizationNameByPublicId(@Param("organizationId") UUID organizationId);
 
     List<Organization> findByPublicIdInAndStatusAndDeletedFalse(Collection<UUID> publicIds, OrganizationStatus status);
 

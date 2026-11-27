@@ -73,7 +73,7 @@ public class PracticeReviewService {
                         PracticeScoringStateService.readSubScores(jsonMapper, item.getAiSubScoresJson()),
                         item.getAiProvider(), item.getAiModel(), item.getAiScoredAt(),
                         readOptions(item.getOptionsJson()),
-                        item.getStatus() == PracticeResponseStatus.ANSWERED ? itemService.resultOf(item) : null,
+                        item.getStatus() == PracticeResponseStatus.ANSWERED ? itemService.resultOf(session, item) : null,
                         item.getSourceQuestionPublicId() == null ? null
                                 : cefrLevels.get(item.getSourceQuestionPublicId())))
                 .toList(), estimatedScoresOf(session, sessionItems), session.effectiveKind().name());

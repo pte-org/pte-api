@@ -288,7 +288,7 @@ class BillingPlatformOverviewQueriesTest {
         UUID tenantA = UUID.randomUUID();
         UUID tenantB = UUID.randomUUID();
         usable(tenantA, plan, Duration.ofDays(90));
-        usable(tenantA, plan, Duration.ofDays(10));
+        usable(tenantA, plan, Duration.ofDays(5));
         usable(tenantB, plan, Duration.ofDays(200));
         subscription(tenantB, plan.getPublicId(), NOW.minusSeconds(1000), NOW.plus(Duration.ofDays(5)),
                 SubscriptionStatus.EXPIRED, ActivationSource.PAYMENT, false, null);
@@ -304,22 +304,22 @@ class BillingPlatformOverviewQueriesTest {
     }
 
     @Test
-    void theExpiringSoonThresholdIsThirtyDaysInclusive() {
+    void theExpiringSoonThresholdIsSevenDaysInclusive() {
         ServicePlan plan = plan("Pro");
         UUID tenant = UUID.randomUUID();
-        usable(tenant, plan, Duration.ofDays(30)); // exactly on the threshold: soon
-        usable(tenant, plan, Duration.ofDays(30).plusSeconds(1)); // not soon
-        usable(tenant, plan, Duration.ofDays(29)); // soon
+        usable(tenant, plan, Duration.ofDays(7)); // exactly on the threshold: soon
+        usable(tenant, plan, Duration.ofDays(7).plusSeconds(1)); // not soon
+        usable(tenant, plan, Duration.ofDays(6)); // soon
         usable(tenant, plan, Duration.ofSeconds(1)); // soon
         usable(tenant, plan, Duration.ZERO); // expires exactly now: not usable at all
-        subscription(tenant, plan.getPublicId(), NOW, NOW.plus(Duration.ofDays(10)), SubscriptionStatus.ACTIVE,
+        subscription(tenant, plan.getPublicId(), NOW, NOW.plus(Duration.ofDays(5)), SubscriptionStatus.ACTIVE,
                 ActivationSource.PAYMENT, false, null); // starts exactly now: usable and soon
 
         SubscriptionCounts counts = service.subscriptionCounts(NOW);
 
         assertThat(counts.active()).isEqualTo(5);
         assertThat(counts.expiringSoon()).isEqualTo(4);
-        assertThat(BillingOverviewService.EXPIRING_SOON_DAYS).isEqualTo(30);
+        assertThat(BillingOverviewService.EXPIRING_SOON_DAYS).isEqualTo(7);
     }
 
     @Test

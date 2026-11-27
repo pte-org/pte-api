@@ -1,12 +1,14 @@
 package com.pte.session.internal.repository;
 
 import com.pte.session.domain.ExamRegistration;
+import com.pte.session.domain.enums.AttendanceStatus;
 import com.pte.session.domain.enums.AudienceMemberStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,6 +31,10 @@ public interface ExamRegistrationRepository extends JpaRepository<ExamRegistrati
 
     boolean existsBySessionIdAndStudentPublicIdAndStatus(Long sessionId, UUID studentPublicId,
             AudienceMemberStatus status);
+
+    /** Whether an enrolled student has been marked with one of the given attendance statuses. */
+    boolean existsBySessionIdAndStudentPublicIdAndStatusAndAttendanceStatusIn(Long sessionId, UUID studentPublicId,
+            AudienceMemberStatus status, Collection<AttendanceStatus> attendanceStatuses);
 
     /** Rows of any status for the given students, so a bulk enroll can promote an excluded or eligible row. */
     List<ExamRegistration> findBySessionIdAndStudentPublicIdIn(Long sessionId, List<UUID> studentPublicIds);

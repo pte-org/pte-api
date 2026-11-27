@@ -110,6 +110,8 @@ class ExamWorkflowServicesTest {
     private ApplicationEventPublisher eventPublisher;
     @Mock
     private TenancyService tenancyService;
+    @Mock
+    private com.pte.session.internal.service.staff.ProctorAssignmentService proctorAssignmentService;
 
     private ExamDraftService draftService;
     private ExamAudienceService audienceService;
@@ -128,7 +130,8 @@ class ExamWorkflowServicesTest {
         AudienceResolver resolver = new AudienceResolver(sourceRepository, registrationRepository,
                 enrollmentModuleService, identityService, startedAttemptLookup);
         draftService = new ExamDraftService(sessionRepository, access, new ExamSkillSelection(), sessionLifecycleService,
-                examDefinitionService, billingService, sessionCodeGenerator, com.pte.TestClocks.fixed());
+                examDefinitionService, billingService, sessionCodeGenerator, proctorAssignmentService,
+                com.pte.TestClocks.fixed());
         audienceService = new ExamAudienceService(sourceRepository, registrationRepository, access, resolver,
                 enrollmentModuleService);
         publishService = new ExamPublishService(sessionRepository, access, sessionLifecycleService,
@@ -179,6 +182,60 @@ class ExamWorkflowServicesTest {
         verify(auditLogService).record(hostAdmin, SessionConstants.AGGREGATE_EXAM_SESSION,
                 response.publicId().toString(), "HK1 mock", "FPT-261010-K7QM",
                 SessionConstants.EVENT_EXAM_DRAFT_CREATED, "HK1 mock");
+    }
+
+    @Test
+    void createDraft_assignsThePickedProctorsToTheNewDraft() {
+        stubTemplateAndSubscription();
+        when(sessionCodeGenerator.generate(tenantId, opensAt)).thenReturn("FPT-261010-K7QM");
+        when(sessionRepository.saveAndFlush(any())).thenAnswer(invocation -> {
+            var session = invocation.getArgument(0, com.pte.session.domain.ExamSession.class);
+            session.setPublicId(UUID.randomUUID());
+            session.setId(10L);
+            return session;
+        });
+        var proctors = List.of(
+                new com.pte.session.internal.dto.request.AssignProctorRequest(UUID.randomUUID()),
+                new com.pte.session.internal.dto.request.AssignProctorRequest(UUID.randomUUID()));
+
+        draftService.createDraft(new CreateExamDraftRequest(
+                "HK1 mock", templateId, subscriptionId, opensAt, closesAt, ExamMode.OFFICIAL_EXAM, null, "HK1-2026",
+                50, null, null, null, null, null, proctors), hostAdmin);
+
+        verify(proctorAssignmentService).assignAtCreation(any(com.pte.session.domain.ExamSession.class),
+                eq(proctors));
+    }
+
+    @Test
+    void createDraft_aProctorThatCannotBeAssigned_failsTheWholeCreation() {
+        stubTemplateAndSubscription();
+        when(sessionCodeGenerator.generate(tenantId, opensAt)).thenReturn("FPT-261010-K7QM");
+        when(sessionRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(new com.pte.session.internal.exception.staff.AlreadyAssignedException())
+                .when(proctorAssignmentService).assignAtCreation(any(), any());
+
+        assertThatThrownBy(() -> draftService.createDraft(new CreateExamDraftRequest(
+                "HK1 mock", templateId, subscriptionId, opensAt, closesAt, ExamMode.OFFICIAL_EXAM, null, "HK1-2026",
+                50, null, null, null, null, null, List.of()), hostAdmin))
+                .isInstanceOf(com.pte.session.internal.exception.staff.AlreadyAssignedException.class);
+
+        verifyNoInteractions(auditLogService);
+    }
+
+    @Test
+    void createDraft_windowClashingWithAScheduledExamOnTheSameBundle_isRejectedBeforeSaving() {
+        stubSubscriptionForDraft();
+        var scheduled = new com.pte.session.domain.ExamSession();
+        scheduled.setPublicId(UUID.randomUUID());
+        scheduled.setName("Morning mock");
+        when(sessionRepository.findFirstOverlapping(subscriptionId, opensAt, closesAt, null))
+                .thenReturn(java.util.Optional.of(scheduled));
+
+        assertThatThrownBy(() -> draftService.createDraft(new CreateExamDraftRequest(
+                "Second mock", templateId, subscriptionId, opensAt, closesAt,
+                ExamMode.OFFICIAL_EXAM, null, null, 50), hostAdmin))
+                .isInstanceOf(com.pte.session.internal.exception.capacity.SessionTimeConflictException.class);
+        verify(sessionRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -325,6 +382,19 @@ class ExamWorkflowServicesTest {
     }
 
     @Test
+    void deleteDraft_alsoDeletesAGeneratedButUnpublishedExam() {
+        ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
+                com.pte.session.domain.enums.LockdownMode.STRICT);
+        session.setStatus(SessionStatus.READY);
+        when(sessionLifecycleService.findOwnedWithLock(session.getPublicId(), hostAdmin)).thenReturn(session);
+
+        draftService.deleteDraft(session.getPublicId(), hostAdmin);
+
+        assertThat(session.isDeleted()).isTrue();
+        verify(sessionRepository).save(session);
+    }
+
+    @Test
     void deleteDraft_rejectsPublishedSession() {
         ExamSession session = draftSession(ExamMode.OFFICIAL_EXAM,
                 com.pte.session.domain.enums.LockdownMode.STRICT);
@@ -432,6 +502,25 @@ class ExamWorkflowServicesTest {
         verify(auditLogService).record(hostAdmin, SessionConstants.AGGREGATE_EXAM_SESSION,
                 session.getPublicId().toString(), session.getName(), session.getSessionCode(),
                 SessionConstants.EVENT_EXAM_PUBLISHED, session.getName());
+    }
+
+    @Test
+    void publish_whenEveryStudentSitsAnotherExamThen_isBlockedBeforeAnyoneIsEnrolled() {
+        ExamSession session = readyPublishSession();
+        UUID studentId = UUID.randomUUID();
+        stubPublishDependencies(session, List.of(audienceMember(session, studentId)));
+        var clash = org.mockito.Mockito.mock(
+                com.pte.session.internal.repository.ExamRegistrationRepository.SlotConflictProjection.class);
+        when(clash.getStudentPublicId()).thenReturn(studentId);
+        when(registrationRepository.findConflictingEnrollments(eq(tenantId), eq(List.of(studentId)), any(), any()))
+                .thenReturn(List.of(clash));
+
+        assertThatThrownBy(() -> publishService.publish(session.getPublicId(), hostAdmin))
+                .isInstanceOf(com.pte.session.internal.exception.draft.ExamPublishBlockedException.class)
+                .satisfies(error -> assertThat(((com.pte.session.internal.dto.response.ExamPreflightResponse)
+                        ((DomainException) error).getData()).issues())
+                        .contains(SessionConstants.PREFLIGHT_AUDIENCE_ALL_TIME_CONFLICT));
+        verify(enrollmentService, never()).bulkEnrollPublishedExam(any(), any());
     }
 
     @Test

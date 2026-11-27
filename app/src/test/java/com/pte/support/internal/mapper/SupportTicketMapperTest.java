@@ -49,11 +49,12 @@ class SupportTicketMapperTest {
         SupportTicket ticket = buildTicket();
         SupportTicketNote note = buildNote(ticket.getPublicId());
 
-        SupportTicketResponse response = SupportTicketMapper.toResponse(ticket, List.of(note));
+        SupportTicketResponse response = SupportTicketMapper.toResponse(ticket, List.of(note), "Ninh Le");
 
         assertThat(response.publicId()).isEqualTo(ticket.getPublicId());
         assertThat(response.tenantId()).isEqualTo(ticket.getTenantId());
         assertThat(response.submitterUserPublicId()).isEqualTo(ticket.getSubmitterUserPublicId());
+        assertThat(response.submitterName()).isEqualTo("Ninh Le");
         assertThat(response.category()).isEqualTo(TicketCategory.BUG);
         assertThat(response.description()).isEqualTo("Some bug description");
         assertThat(response.status()).isEqualTo(TicketStatus.OPEN);

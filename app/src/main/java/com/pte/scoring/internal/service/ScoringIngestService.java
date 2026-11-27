@@ -5,6 +5,7 @@ import com.pte.scoring.internal.service.objective.ScoringMethods;
 import com.pte.attempt.AttemptService;
 import com.pte.attempt.dto.response.SubmittedAnswerView;
 import com.pte.scoring.domain.AiEvaluation;
+import com.pte.scoring.domain.enums.ScoringMethod;
 import com.pte.scoring.internal.repository.AiEvaluationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,11 +70,23 @@ public class ScoringIngestService {
                     view.examDefinitionPublicId(), view.taskType(), view.section(),
                     ScoringMethods.of(view.runtime()).orElse(null));
             scoreIfObjective(evaluation, view);
+            scoreIfBlank(evaluation, view);
             try {
                 evaluationRepository.save(evaluation);
             } catch (DataIntegrityViolationException ex) {
                 // Concurrent ingest of the same answer — the unique key already dedups it.
             }
+        }
+    }
+
+    /**
+     * An AI-scored answer the candidate left empty is a 0 by rule: it never goes to a vendor and never waits on an
+     * examiner. A missing answer row already counts as 0 the same way.
+     */
+    private void scoreIfBlank(AiEvaluation evaluation, SubmittedAnswerView view) {
+        ScoringMethod method = evaluation.getScoringMethod();
+        if (method != null && method.isAiScored() && (view.payload() == null || view.payload().isBlank())) {
+            evaluation.markBlankAnswer(clock.instant());
         }
     }
 

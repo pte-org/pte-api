@@ -31,12 +31,13 @@ public class AiOverviewService {
                 hasText(llm.getApiKey()), ProviderLinks.hostOf(kokoro.getBaseUrl()),
                 ProviderLinks.speechPage(kokoro.getWebUrl(), kokoro.getBaseUrl()),
                 hasText(kokoro.getApiKey()), prompts.getPromptVersion(), catalog.supported().size(),
-                new AiStatusResponse.Limits(allowance.maxItemsPerJob(), allowance.maxItemsPerUserPerDay(),
+                new AiStatusResponse.Limits(allowance.maxItemsPerJob(), allowance.maxItemsPerBatch(),
+                        allowance.maxItemsPerUserPerDay(),
                         allowance.maxItemsPerDayGlobal(), allowance.maxConcurrentJobs(), allowance.maxCallsPerItem(),
                         GenerationLimits.isUnlimited(allowance.maxItemsPerUserPerDay()),
                         GenerationLimits.isUnlimited(allowance.maxItemsPerDayGlobal()),
                         GenerationLimits.isUnlimited(allowance.maxItemsPerBatch()),
-                        allowance.effectiveMaxItemsPerBatch()));
+                        allowance.effectiveMaxItemsPerBatch(), allowance.pausedBatchExpiryHours()));
     }
 
     private static boolean hasText(String value) {

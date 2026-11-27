@@ -26,10 +26,12 @@ class JobStatusTest {
     }
 
     @Test
-    void activeStillMirrorsTheOneActiveJobIndex() {
-        assertThat(JobStatus.ACTIVE)
-                .containsExactlyInAnyOrder(JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.CANCELLING);
-        assertThat(JobStatus.LEASED).containsExactlyInAnyOrder(JobStatus.RUNNING, JobStatus.CANCELLING);
+    void activeCountsAJobStillStoppingForAPause() {
+        // A PAUSING child still holds its lease and its slot until its worker hands it back.
+        assertThat(JobStatus.ACTIVE).containsExactlyInAnyOrder(JobStatus.QUEUED, JobStatus.RUNNING,
+                JobStatus.CANCELLING, JobStatus.PAUSING);
+        assertThat(JobStatus.LEASED)
+                .containsExactlyInAnyOrder(JobStatus.RUNNING, JobStatus.CANCELLING, JobStatus.PAUSING);
         assertThat(JobStatus.OPEN).containsAll(JobStatus.ACTIVE);
     }
 
@@ -39,8 +41,12 @@ class JobStatusTest {
         union.addAll(BatchStatus.TERMINAL);
 
         assertThat(union).containsExactlyInAnyOrder(BatchStatus.values());
-        assertThat(BatchStatus.OPEN)
-                .containsExactlyInAnyOrder(BatchStatus.QUEUED, BatchStatus.RUNNING, BatchStatus.CANCELLING);
+        // Mirrors the one-open-batch index (V60): a paused batch still holds its requester's open batch.
+        assertThat(BatchStatus.OPEN).containsExactlyInAnyOrder(BatchStatus.QUEUED, BatchStatus.RUNNING,
+                BatchStatus.CANCELLING, BatchStatus.PAUSING, BatchStatus.PAUSED);
+        assertThat(BatchStatus.HALTED).containsExactlyInAnyOrder(BatchStatus.PAUSING, BatchStatus.PAUSED);
+        assertThat(BatchStatus.CANCELLABLE).doesNotContain(BatchStatus.CANCELLING)
+                .doesNotContainAnyElementsOf(BatchStatus.TERMINAL);
     }
 
     @Test

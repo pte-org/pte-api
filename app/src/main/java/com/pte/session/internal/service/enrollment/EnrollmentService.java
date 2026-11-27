@@ -248,22 +248,18 @@ public class EnrollmentService {
     }
 
     /**
-     * The roster is editable once the exam is published and before it runs (SCHEDULED) or after it ends
-     * (CLOSED). Earlier statuses take their audience from the wizard's sources, and OPEN exams have students
-     * sitting them.
+     * The roster is editable only once the exam is published and before it runs (SCHEDULED). Earlier statuses
+     * take their audience from the wizard's sources, OPEN exams have students sitting them, and a student added
+     * after the exam ended (CLOSED) could never sit it.
      */
     private void requireManualAudienceMutationAllowed(ExamSession session) {
-        if (session.getStatus() != SessionStatus.SCHEDULED && session.getStatus() != SessionStatus.CLOSED) {
+        if (session.getStatus() != SessionStatus.SCHEDULED) {
             throw new ExamAudienceLockedException();
         }
     }
 
-    /** Skipped for closed exams: an invitation to an exam that already ended would only confuse the student. */
     private void publishEnrolled(ExamSession session, UUID studentPublicId) {
-        if (session.getStatus() == SessionStatus.CLOSED) {
-            return;
-        }
-        eventPublisher.publishEvent(
-                new StudentEnrolledEvent(session.getPublicId(), studentPublicId, session.getTenantId()));
+        eventPublisher.publishEvent(new StudentEnrolledEvent(session.getPublicId(), studentPublicId,
+                session.getTenantId(), session.getName(), session.getOpensAt(), session.getClosesAt()));
     }
 }

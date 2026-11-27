@@ -105,6 +105,46 @@ class AnswerPayloadDecoderFixtureTest {
     }
 
     @Test
+    void typeIn_carriesTheAnswerKeyPerGapForHostReview() {
+        DecodedAnswerPayload decoded = decoder.decode(SubmittedAnswerFixtures.answer(
+                "FILL_IN_THE_BLANKS_TYPE_IN", "[]", "rapid,,forest", "[\"rapid\",\"river\",\"forest\"]"));
+
+        assertThat(decoded.kind()).isEqualTo(AnswerPayloadKind.POSITIONAL_SELECTION);
+        assertThat(decoded.gapValues()).containsExactly("rapid", null, "forest");
+        assertThat(decoded.correctGapValues()).containsExactly("rapid", "river", "forest");
+    }
+
+    @Test
+    void typeIn_withoutAReadableAnswerKeyStillDecodesTheStudentValues() {
+        DecodedAnswerPayload decoded = decoder.decode(SubmittedAnswerFixtures.answer(
+                "FILL_IN_THE_BLANKS_TYPE_IN", "[]", "a,b", "not json"));
+
+        assertThat(decoded.gapValues()).containsExactly("a", "b");
+        assertThat(decoded.correctGapValues()).isNull();
+    }
+
+    @Test
+    void reorderParagraphs_keepsTheOrderTheStudentArranged() {
+        String optionsJson = "[{\"text\":\"first\",\"correct\":false,\"orderIndex\":0},"
+                + "{\"text\":\"second\",\"correct\":false,\"orderIndex\":1},"
+                + "{\"text\":\"third\",\"correct\":false,\"orderIndex\":2}]";
+
+        DecodedAnswerPayload decoded = decoder.decode(answer("RE_ORDER_PARAGRAPHS", optionsJson, "2,0,1"));
+
+        assertThat(decoded.kind()).isEqualTo(AnswerPayloadKind.SELECTION);
+        assertThat(decoded.submittedOrder()).containsExactly(2, 0, 1);
+        assertThat(decoded.options()).hasSize(3);
+    }
+
+    @Test
+    void otherSelectionTasksDoNotCarryASubmittedOrder() {
+        String optionsJson = "[{\"text\":\"A\",\"correct\":false,\"orderIndex\":0},"
+                + "{\"text\":\"B\",\"correct\":true,\"orderIndex\":1}]";
+
+        assertThat(decoder.decode(answer("MC_LISTENING_MULTIPLE", optionsJson, "1")).submittedOrder()).isNull();
+    }
+
+    @Test
     void unparsableOptions_stayUnrecognized() {
         DecodedAnswerPayload decoded = decoder.decode(answer("MC_LISTENING_MULTIPLE", "not json", "1"));
 

@@ -19,6 +19,7 @@ import com.pte.session.dto.event.ExamPreviewReadyEvent;
 import com.pte.session.dto.event.SessionCancelledEvent;
 import com.pte.session.internal.constant.SessionConstants;
 import com.pte.session.internal.dto.request.BulkEnrollRequest;
+import com.pte.session.internal.dto.response.audience.AudienceMemberResponse;
 import com.pte.session.internal.dto.response.audience.AudiencePreviewResponse;
 import com.pte.session.internal.dto.response.enrollment.BulkEnrollResponse;
 import com.pte.session.internal.dto.response.ExamPreflightResponse;
@@ -280,6 +281,9 @@ public class ExamPublishService {
             issues.add(SessionConstants.PREFLIGHT_AUDIENCE_NO_ELIGIBLE);
         }
         if (audience.blockedCount() > 0) issues.add(SessionConstants.PREFLIGHT_AUDIENCE_CONFLICT_BLOCKED);
+        if (audience.eligibleCount() > 0 && everyEligibleStudentClashes(session, audience)) {
+            issues.add(SessionConstants.PREFLIGHT_AUDIENCE_ALL_TIME_CONFLICT);
+        }
         if (!audience.capacityReady()) issues.add(SessionConstants.SESSION_CAPACITY_EXCEEDED);
         if (!persistAudience && session.getStatus() == SessionStatus.READY
                 && resolver.changedAfterGeneration(session, audience)) {
@@ -287,6 +291,25 @@ public class ExamPublishService {
         }
         return new ExamPreflightResponse(issues.isEmpty(), template, audience, subscriptionReady,
                 windowReady, overlapReady, issues);
+    }
+
+    /**
+     * Publishing skips a student already enrolled in another exam at the same time. Some may be skipped, but if
+     * every eligible student would be, the exam would be published with nobody to sit it.
+     */
+    private boolean everyEligibleStudentClashes(ExamSession session, AudiencePreviewResponse audience) {
+        List<UUID> eligible = audience.members().stream()
+                .filter(member -> member.status() == AudienceMemberStatus.ELIGIBLE)
+                .map(AudienceMemberResponse::studentPublicId)
+                .toList();
+        if (eligible.isEmpty()) {
+            return false;
+        }
+        Set<UUID> clashing = registrationRepository.findConflictingEnrollments(session.getTenantId(), eligible,
+                        session.getOpensAt(), session.getClosesAt()).stream()
+                .map(ExamRegistrationRepository.SlotConflictProjection::getStudentPublicId)
+                .collect(Collectors.toSet());
+        return clashing.containsAll(eligible);
     }
 
     private GenerationJobResponse generationOf(ExamSession session) {

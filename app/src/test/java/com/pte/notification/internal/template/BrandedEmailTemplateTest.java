@@ -111,22 +111,72 @@ class BrandedEmailTemplateTest {
     // ---- temporary credentials ----
 
     @Test
-    void credentials_showsTheLoginDetailsWithoutAnyLink() {
-        RenderedEmail email = BrandedEmailTemplate.temporaryCredentials("An Nguyen", "tenant.student", "ABCD-2345", 2026);
+    void credentials_welcomeFlow_rendersSummaryCardCtaAndCallout() {
+        RenderedEmail email = BrandedEmailTemplate.temporaryCredentials(
+                "Bùi Khánh Linh",
+                "Ninh Lê Organization 2",
+                "Student",
+                "ninh-le2.linhbui",
+                "UpGS-pdxr",
+                "http://localhost:3000/login",
+                true,
+                2026);
 
-        assertThat(email.html()).contains("An Nguyen", "tenant.student", "ABCD-2345");
-        assertThat(email.html()).doesNotContain("href=");
-        assertThat(email.html()).contains("change it right away", "Temporary password");
-        assertThat(email.text()).contains("tenant.student", "ABCD-2345");
-        assertThat(email.subject()).isNotBlank();
+        assertThat(email.subject()).isEqualTo("[PTE Prep] Welcome to PTE Prep - Ninh Lê Organization 2");
+        assertThat(email.html()).contains(
+                "Welcome to PTE Prep",
+                "Hi Bùi Khánh Linh,",
+                "Your account for <strong>Ninh Lê Organization 2</strong> is ready. Use the details below to sign in to PTE Prep Practice or the exam app.",
+                "Organization",
+                "Role",
+                "Student",
+                "ninh-le2.linhbui",
+                "UpGS-pdxr",
+                "Sign in to PTE Prep Practice",
+                "http://localhost:3000/login",
+                "Button not working? Copy this link into your browser:",
+                "<strong>Keep this password private.</strong>",
+                "Did not expect this? Contact your center or administrator.",
+                "Warm regards,<br>The PTE Prep team");
+        assertThat(email.text()).contains(
+                "Welcome to PTE Prep",
+                "Hi Bùi Khánh Linh,",
+                "Organization: Ninh Lê Organization 2",
+                "Role: Student",
+                "Username: ninh-le2.linhbui",
+                "Temporary password: UpGS-pdxr",
+                "Sign in: http://localhost:3000/login",
+                "Warm regards,\nThe PTE Prep team");
+    }
+
+    @Test
+    void credentials_resetFlow_rendersTemporaryPasswordHeadingAndIntro() {
+        RenderedEmail email = BrandedEmailTemplate.temporaryCredentials(
+                "An Nguyen",
+                "Acme Center",
+                "Student",
+                "tenant.student",
+                "ABCD-2345",
+                "https://app.pteprep.local/login",
+                false,
+                2026);
+
+        assertThat(email.subject()).contains("Your temporary password");
+        assertThat(email.html()).contains(
+                "Your temporary password",
+                "Hi An Nguyen,",
+                "A temporary password was set for your <strong>Acme Center</strong> account on PTE Prep.",
+                "Sign in to PTE Prep Practice",
+                "<strong>Keep this password private.</strong>");
+        assertThat(email.html()).doesNotContain("Welcome to PTE Prep");
     }
 
     @Test
     void credentials_putsEachValueInItsOwnSelectableBlockAndStopsMailAutoLinking() {
         String html = BrandedEmailTemplate.temporaryCredentials("An", "a@b.vn", "ABCD-2345", 2026).html();
 
-        assertThat(html).contains("user-select:all", "a<span>@</span>b<span>.</span>vn").doesNotContain("a@b.vn");
-        assertThat(occurrences(html, "-webkit-user-select:all")).isEqualTo(2);
+        assertThat(html).contains("a<span>@</span>b<span>.</span>vn").doesNotContain("a@b.vn");
+        assertThat(html).contains("ABCD-2345", "Keep this password private.");
     }
 
     @Test
@@ -141,7 +191,29 @@ class BrandedEmailTemplateTest {
     void credentials_greetsPoliteWhenThereIsNoName() {
         RenderedEmail email = BrandedEmailTemplate.temporaryCredentials(null, "u", "p", 2026);
 
-        assertThat(email.html()).contains("Hello,").doesNotContain("null");
+        assertThat(email.html()).contains("Hi,").doesNotContain("null");
         assertThat(email.text()).doesNotContain("null");
+    }
+
+    @Test
+    void rejection_keepsReasonLineBreaksAndEscapesMarkup() {
+        RenderedEmail email = BrandedEmailTemplate.applicationRejected("Acme", "acme",
+                "Line one\r\nLine <b>two</b> & three", "https://x.example/register", "help@x.example", 2026);
+
+        assertThat(email.html()).contains("Line one<br>Line &lt;b&gt;two&lt;/b&gt; &amp; three")
+                .doesNotContain("<b>two");
+        assertThat(email.text()).contains("Reason: Line one");
+    }
+
+    @Test
+    void approvalAndRejection_shareTheSameButtonColourAndLinkSpacing() {
+        String approved = BrandedEmailTemplate.applicationApproved("Acme", "acme", "u", "p", "https://x.example/login",
+                "help@x.example", 2026).html();
+        String rejected = BrandedEmailTemplate.applicationRejected("Acme", "acme", "r", "https://x.example/register",
+                "help@x.example", 2026).html();
+
+        for (String html : new String[] {approved, rejected}) {
+            assertThat(html).contains("bgcolor=\"#3359d2\"").contains("margin:0 0 6px").contains("margin:0 0 22px");
+        }
     }
 }

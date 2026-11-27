@@ -16,7 +16,6 @@ public record AssignedProctorSessionResponse(
         SessionStatus status,
         Instant opensAt,
         Instant closesAt,
-        String assignmentRole,
         boolean canMonitor,
         String monitoringBlockingReason
 ) {
@@ -27,9 +26,7 @@ public record AssignedProctorSessionResponse(
             String sessionCode,
             SessionStatus status,
             Instant opensAt,
-            Instant closesAt,
-            String assignmentRole) {
-        this(assignmentPublicId, examSessionPublicId, name, sessionCode, status, opensAt, closesAt,
-                assignmentRole, false, null);
+            Instant closesAt) {
+        this(assignmentPublicId, examSessionPublicId, name, sessionCode, status, opensAt, closesAt, false, null);
     }
 }

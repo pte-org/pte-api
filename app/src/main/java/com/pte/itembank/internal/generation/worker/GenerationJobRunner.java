@@ -7,6 +7,7 @@ import com.pte.itembank.internal.generation.pipeline.GenerationItemStateService;
 import com.pte.itembank.internal.generation.pipeline.GenerationPipeline;
 import com.pte.itembank.internal.generation.pipeline.ItemOutcome;
 import com.pte.itembank.internal.generation.pipeline.JobClaim;
+import com.pte.itembank.internal.generation.stop.GenerationStop;
 import com.pte.shared.security.CurrentUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,7 +62,20 @@ public class GenerationJobRunner {
                 leases.finish(claim, JobStatus.CANCELLED, null);
                 return;
             }
-            ItemOutcome outcome = pipeline.runItem(claim, caller.get(), index);
+            if (state == LeaseState.PAUSE_REQUESTED) {
+                leases.release(claim);
+                return;
+            }
+            // Renewed again before every provider call: one question may take many slow calls.
+            ItemOutcome outcome = pipeline.runItem(claim, caller.get(), index, () -> leases.renewLease(claim));
+            // Stopped by a cancel or a pause: whatever the item reported, the job stops now. Clearing the interrupt
+            // flag first keeps the closing database calls from failing on it. Neither the flag nor the stop signal
+            // says why, so the reason is read back from the job (a cancel wins over a pause).
+            boolean interrupted = Thread.interrupted();
+            if (interrupted || outcome == ItemOutcome.STOPPED || GenerationStop.isRequested()) {
+                outcome = itemState.stopRequested(claim) == ItemOutcome.PAUSED ? ItemOutcome.PAUSED
+                        : ItemOutcome.CANCELLED;
+            }
             providerOutages = outcome == ItemOutcome.FAILED_PROVIDER_UNAVAILABLE ? providerOutages + 1 : 0;
             if (outcome == ItemOutcome.LEASE_LOST) {
                 return;
@@ -69,6 +83,10 @@ public class GenerationJobRunner {
             if (outcome == ItemOutcome.CANCELLED) {
                 itemState.cancelOpen(claim);
                 leases.finish(claim, JobStatus.CANCELLED, null);
+                return;
+            }
+            if (outcome == ItemOutcome.PAUSED) {
+                leases.release(claim);
                 return;
             }
             if (outcome == ItemOutcome.FAILED_PROVIDER_AUTH) {

@@ -22,7 +22,9 @@ import com.pte.itembank.internal.generation.exception.GenerationRequestInvalidEx
 import com.pte.itembank.internal.generation.repository.GenerationBatchRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
+import com.pte.itembank.internal.generation.worker.GenerationCancelRequested;
 import com.pte.shared.security.CurrentUser;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,11 +51,13 @@ public class QuestionGenerationJobService {
     private final Clock clock;
     private final GenerationLimits limits;
     private final GenerationQuotaGuard quota;
+    private final ApplicationEventPublisher events;
 
     public QuestionGenerationJobService(GenerationJobRepository jobs, GenerationJobItemRepository items,
                                         GenerationBatchRepository batches, GenerationTaskTypeCatalog catalog,
                                         QuestionGenerationProperties properties, GenerationLimits limits,
-                                        GenerationQuotaGuard quota, Clock clock) {
+                                        GenerationQuotaGuard quota, ApplicationEventPublisher events, Clock clock) {
+        this.events = events;
         this.limits = limits;
         this.quota = quota;
         this.jobs = jobs;
@@ -131,6 +135,8 @@ public class QuestionGenerationJobService {
         } else if (jobs.markCancelling(publicId) == 0) {
             throw new GenerationJobConflictException(QuestionGenerationConstants.GENERATION_JOB_NOT_CANCELLABLE,
                     QuestionGenerationConstants.GENERATION_JOB_NOT_CANCELLABLE_MESSAGE);
+        } else {
+            events.publishEvent(new GenerationCancelRequested(publicId));
         }
         QuestionGenerationJob refreshed = jobs.findByPublicIdAndDeletedFalse(publicId)
                 .orElseThrow(GenerationJobNotFoundException::new);

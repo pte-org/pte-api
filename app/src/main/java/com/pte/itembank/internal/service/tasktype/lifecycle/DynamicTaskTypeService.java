@@ -21,6 +21,7 @@ import com.pte.itembank.TaskRuntimeContractDescriptor;
 import com.pte.itembank.TaskTypeCodeCompatibility;
 import com.pte.itembank.TaskTypeKeyNormalizer;
 import com.pte.itembank.TaskTypeObservability;
+import com.pte.shared.audit.AuditLogChangeWriter;
 import com.pte.shared.audit.AuditLogService;
 import com.pte.shared.security.CurrentUser;
 import com.pte.shared.security.SecurityPolicy;
@@ -44,12 +45,15 @@ public class DynamicTaskTypeService {
     private final RuntimeContractResolver contractResolver;
     private final AuditLogService auditLogService;
     private final TaskTypeObservability observability;
+    private final AuditLogChangeWriter changeWriter;
 
     public DynamicTaskTypeService(
             QuestionTypeRepository repository,
             RuntimeContractResolver contractResolver,
             AuditLogService auditLogService,
-            TaskTypeObservability observability) {
+            TaskTypeObservability observability,
+            AuditLogChangeWriter changeWriter) {
+        this.changeWriter = changeWriter;
         this.repository = repository;
         this.contractResolver = contractResolver;
         this.auditLogService = auditLogService;
@@ -97,8 +101,8 @@ public class DynamicTaskTypeService {
             if (observability != null) {
                 observability.dynamicTaskTypeCreated();
             }
-            audit(caller, ItembankConstants.TASK_TYPE_CREATED, response.publicId(),
-                    "Created task type " + taskTypeKey);
+            TaskTypeAuditState.write(changeWriter, auditLogService, caller, ItembankConstants.TASK_TYPE_CREATED,
+                    definition, "Created task type " + taskTypeKey, null, TaskTypeAuditState.of(definition));
             return response;
         } catch (DataIntegrityViolationException ex) {
             markDuplicate(caller, taskTypeKey);
@@ -118,6 +122,7 @@ public class DynamicTaskTypeService {
             deny(caller, publicId, ItembankConstants.ACADEMIC_DRAFT_WRITE_REQUIRED);
         }
         String taskTypeKey = definition.getTaskTypeKey() == null ? definition.getCode() : definition.getTaskTypeKey();
+        TaskTypeAuditState before = TaskTypeAuditState.of(definition);
         String normalizedDisplayName = normalizeDisplayNameForApi(request.displayName());
         if (repository.findByNormalizedDisplayName(normalizedDisplayName)
                 .filter(existing -> !java.util.Objects.equals(existing.getPublicId(), publicId)).isPresent()) {
@@ -161,12 +166,11 @@ public class DynamicTaskTypeService {
         try {
             QuestionTypeResponse response = QuestionTypeMapper.toResponse(repository.save(definition),
                     contractResolver.resolveDynamic(definition), isRuntimeLocked(definition));
-            audit(caller, ItembankConstants.TASK_TYPE_UPDATED, publicId,
-                    "Updated task type metadata " + taskTypeKey);
-            if (runtimeChange) {
-                audit(caller, ItembankConstants.TASK_TYPE_RUNTIME_UPDATED, publicId,
-                        "Updated runtime contract for task type " + taskTypeKey);
-            }
+            TaskTypeAuditState.write(changeWriter, auditLogService, caller,
+                    runtimeChange ? ItembankConstants.TASK_TYPE_RUNTIME_UPDATED : ItembankConstants.TASK_TYPE_UPDATED,
+                    definition, runtimeChange ? "Updated runtime contract for task type " + taskTypeKey
+                            : "Updated task type metadata " + taskTypeKey,
+                    before, TaskTypeAuditState.of(definition));
             return response;
         } catch (DataIntegrityViolationException ex) {
             markDuplicate(caller, taskTypeKey);

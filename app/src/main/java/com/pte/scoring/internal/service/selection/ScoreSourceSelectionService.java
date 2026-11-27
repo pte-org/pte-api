@@ -212,7 +212,8 @@ public class ScoreSourceSelectionService {
     }
 
     private boolean isAiEligible(AiEvaluation answer) {
-        return answer.getScoringMethod() != null && answer.getScoringMethod().isAiScored();
+        return answer.getScoringMethod() != null && answer.getScoringMethod().isAiScored()
+                && !answer.isScoredAsBlankAnswer();
     }
 
     private boolean isAvailable(AiEvaluation answer, ExaminerEvaluation examinerScore, ScoreSource source) {

@@ -91,12 +91,13 @@ public class UserAccountProvisioner {
             tenancyService.assertCanAddStudents(tenantId, 1L);
         }
         String username = UsernameGenerator.generateUnused(
-                tenancyService.getTenantCode(tenantId), userRepository::existsByUsername);
+                tenancyService.getTenantCode(tenantId), email, userRepository::existsByUsername);
         String temporarySecret = PasswordGenerator.generateReadable();
         User account = newAccount(request, username, temporarySecret, tenantId, roles);
+        String roleLabel = roles.stream().findFirst().map(Role::displayLabel).orElse(null);
         eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(UUID.randomUUID(),
                 account.getPublicId(), tenantId, account.getUsername(), account.getEmail(), account.getFullName(),
-                temporarySecret));
+                temporarySecret, roleLabel, true));
         return UserMapper.toResponse(account);
     }
 
@@ -174,7 +175,7 @@ public class UserAccountProvisioner {
             if (request.shouldSendCredentialsEmail()) {
                 eventPublisher.publishEvent(new UserCredentialsEmailRequestedEvent(UUID.randomUUID(),
                         user.getPublicId(), tenantId, user.getUsername(), user.getEmail(), user.getFullName(),
-                        result.get().generatedPassword()));
+                        result.get().generatedPassword(), Role.STUDENT.displayLabel(), true));
             }
         }
         if (!withClass.isEmpty()) {
@@ -204,7 +205,8 @@ public class UserAccountProvisioner {
             UserBulkCreateWriter.Row row, UUID tenantId, String tenantCode) {
         for (int attempt = 0; attempt < UsernameGenerator.COLLISION_RETRIES; attempt++) {
             Optional<UserBulkCreateWriter.Result> result = bulkCreateWriter.createGeneratedStudent(
-                    UsernameGenerator.generate(tenantCode), row, tenantId);
+                    UsernameGenerator.generateUnused(tenantCode, row.email(), userRepository::existsByUsername),
+                    row, tenantId);
             if (result.isPresent()) {
                 return result;
             }

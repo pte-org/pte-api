@@ -7,19 +7,30 @@ package com.pte.billing;
  */
 public enum QuestionGenerationLimit {
 
-    ITEMS_PER_JOB("question_generation_max_items_per_job", 10, 1, 50, "questions",
+    /**
+     * The internal chunk a batch is cut into, not a business limit: kept off the settings page. Its maximum is the
+     * V34 CHECK on {@code requested_count} (1..10), so no stored value can ask for a job the database refuses.
+     */
+    ITEMS_PER_JOB("question_generation_max_items_per_job", 10, 1, 10, "questions",
             "Questions one generation job may ask for"),
-    ITEMS_PER_BATCH("question_generation_max_items_per_batch", 50, 0, 500, "questions",
+    /** 0 (the default) leaves a batch bounded only by the daily limits and the technical cap of 500. */
+    ITEMS_PER_BATCH("question_generation_max_items_per_batch", 0, 0, 500, "questions",
             "Questions one generation batch may ask for"),
     ITEMS_PER_USER_PER_DAY("question_generation_max_items_per_user_per_day", 100, 0, 10_000, "questions",
-            "Questions one admin may generate per day"),
+            "Questions one person may generate per day"),
     ITEMS_PER_DAY("question_generation_max_items_per_day", 300, 0, 100_000, "questions",
-            "Questions all admins together may generate per day"),
+            "Questions all users together may generate per day"),
     CONCURRENT_JOBS("question_generation_max_concurrent_jobs", 3, 1, 20, "jobs",
             "Generation jobs that may run at the same time"),
     /** One write-review round costs up to five calls, so fewer would allow no round at all. */
     CALLS_PER_ITEM("question_generation_max_calls_per_item", 40, 5, 200, "calls",
-            "AI calls one generated question may use (writing, review, media)");
+            "AI calls one generated question may use (writing, review, media)"),
+    /**
+     * 0 keeps a paused batch until a person resumes or cancels it. The expiry is read when it is checked, so a new
+     * value applies to the batches already paused too.
+     */
+    PAUSED_BATCH_EXPIRY_HOURS("question_generation_paused_batch_expiry_hours", 24, 0, 168, "hours",
+            "Hours a paused generation batch is kept before it is cancelled (0 keeps it); applies to batches already paused");
 
     private final String key;
     private final int defaultValue;

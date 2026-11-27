@@ -32,6 +32,9 @@ public final class SessionConstants {
     public static final String SESSION_NOT_STARTED = "SESSION_NOT_STARTED";
     public static final String SESSION_NOT_STARTED_FRIENDLY =
             "This exam has not opened yet. Please come back at the scheduled start time.";
+    public static final String ATTENDANCE_REQUIRED = "ATTENDANCE_REQUIRED";
+    public static final String ATTENDANCE_REQUIRED_FRIENDLY =
+            "Your proctor has not checked you in yet. Please wait for check-in, then try again.";
     public static final String SESSION_CLOSED = "SESSION_CLOSED";
     public static final String SESSION_CLOSED_FRIENDLY =
             "This exam has already closed.";
@@ -82,6 +85,7 @@ public final class SessionConstants {
     public static final String EXAM_DRAFT_CONFIGURATION_INVALID = "EXAM_DRAFT_CONFIGURATION_INVALID";
     public static final String AUDIENCE_SOURCE_NOT_FOUND = "AUDIENCE_SOURCE_NOT_FOUND";
     public static final String EXAM_AUDIENCE_LOCKED = "EXAM_AUDIENCE_LOCKED";
+    public static final String PROCTOR_ASSIGNMENT_LOCKED = "PROCTOR_ASSIGNMENT_LOCKED";
     public static final String ENROLLED_STUDENT_ALREADY_STARTED = "ENROLLED_STUDENT_ALREADY_STARTED";
     public static final String AUDIENCE_SOURCE_ALREADY_COVERED = "AUDIENCE_SOURCE_ALREADY_COVERED";
     public static final String LEGACY_SESSION_CREATE_REQUIRES_NEW_WORKFLOW =
@@ -101,7 +105,7 @@ public final class SessionConstants {
     public static final String SESSION_NOT_CANCELLABLE_FRIENDLY =
             "This exam can no longer be cancelled in its current state.";
     public static final String EXAM_DRAFT_NOT_DELETABLE_FRIENDLY =
-            "Only an unpublished exam draft can be deleted.";
+            "Only an exam that has not been published yet can be deleted.";
     public static final String SESSION_WINDOW_OUTSIDE_SUBSCRIPTION_FRIENDLY =
             "The exam window must fit within the selected subscription period.";
     public static final String SESSION_WINDOW_OUTSIDE_SUBSCRIPTION_RANGE_FRIENDLY =
@@ -133,6 +137,8 @@ public final class SessionConstants {
     public static final String PREFLIGHT_AUDIENCE_EMPTY = "AUDIENCE_EMPTY";
     public static final String PREFLIGHT_AUDIENCE_NO_ELIGIBLE = "AUDIENCE_NO_ELIGIBLE";
     public static final String PREFLIGHT_AUDIENCE_CONFLICT_BLOCKED = "AUDIENCE_CONFLICT_BLOCKED";
+    /** Every eligible student already sits another exam at this time, so publishing would leave nobody enrolled. */
+    public static final String PREFLIGHT_AUDIENCE_ALL_TIME_CONFLICT = "AUDIENCE_ALL_TIME_CONFLICT";
     public static final String AGGREGATE_EXAM_SESSION = "ExamSession";
     public static final String EVENT_EXAM_DRAFT_CREATED = "ExamDraftCreated";
     public static final String EVENT_EXAM_DRAFT_UPDATED = "ExamDraftUpdated";
@@ -166,7 +172,8 @@ public final class SessionConstants {
     public static final String CEFR_TARGET_DUPLICATE_LEVEL = "A CEFR level can appear only once";
     public static final String CEFR_TARGET_NOT_100 = "The CEFR percentages must sum to 100";
     public static final String SKILLS_SIZE_INVALID = "Between 1 and 4 skills must be selected";
-    public static final String SKILLS_DUPLICATE = "Select each skill only once.";
+    public static final String PROCTORS_SIZE_INVALID = "At most 50 proctors can be assigned when creating an exam";
+    public static final String SKILLS_DUPLICATE ="Select each skill only once.";
     public static final String SKILLS_NOT_IN_TEMPLATE = "Choose only skills included in the selected exam template.";
     public static final String SKILLS_FULL_TEMPLATE_REQUIRED =
             "Mock and official exams must include every skill in the selected template.";
@@ -181,7 +188,6 @@ public final class SessionConstants {
     public static final String CAPACITY_REQUIRED = "Capacity is required";
     public static final String STUDENT_REFERENCE_REQUIRED = "Student reference is required";
     public static final String REPLAY_POLICY_LIMIT_POSITIVE = "Replay policy limit must be positive if provided";
-    public static final String ROLE_REQUIRED = "Role is required";
     public static final String CLASS_REFERENCE_REQUIRED = "Class reference is required";
     public static final String EXAM_PREFLIGHT_FRIENDLY =
             "This exam is not ready yet. Review the highlighted template, package, schedule, or student conflicts.";
@@ -189,6 +195,8 @@ public final class SessionConstants {
             "The exam is still being prepared. Please wait until generation finishes before publishing it.";
     public static final String EXAM_AUDIENCE_LOCKED_FRIENDLY =
             "Students can't be added or removed while the exam is being prepared or running. Try again before it starts or after it ends.";
+    public static final String PROCTOR_ASSIGNMENT_LOCKED_FRIENDLY =
+            "Proctors can't be added once the exam has started or ended.";
     public static final String ENROLLED_STUDENT_ALREADY_STARTED_FRIENDLY =
             "This student already started the exam, so they can't be removed from it.";
     public static final String AUDIENCE_SOURCE_ALREADY_COVERED_FRIENDLY =
