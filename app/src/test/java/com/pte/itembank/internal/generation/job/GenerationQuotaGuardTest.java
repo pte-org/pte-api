@@ -51,7 +51,7 @@ class GenerationQuotaGuardTest {
         used(400, 9000);
 
         assertThatCode(() -> guard.requireWithin(staff, 70)).doesNotThrowAnyException();
-        assertThat(guard.snapshot(staff)).isEqualTo(new GenerationQuotaResponse(400, 0, null, true, null, 500));
+        assertThat(guard.snapshot(staff)).isEqualTo(new GenerationQuotaResponse(400, 0, null, true, null, 500, false));
     }
 
     @Test

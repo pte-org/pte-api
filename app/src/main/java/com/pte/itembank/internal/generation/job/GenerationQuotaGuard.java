@@ -67,7 +67,7 @@ public class GenerationQuotaGuard {
             remaining = globalLeft;
         }
         return new GenerationQuotaResponse(used, userLimit, remaining == null ? null : remaining.intValue(),
-                scope == null, scope, limits.effectiveMaxItemsPerBatch());
+                scope == null, scope, limits.effectiveMaxItemsPerBatch(), limits.pictureEnabled());
     }
 
     private Instant dayStart() {
