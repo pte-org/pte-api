@@ -21,6 +21,8 @@ public final class PracticeFeedbackReader {
     private static final String REASON = "reason";
     private static final String TIPS = "tips";
     private static final String WORD_MARKS = "wordMarks";
+    private static final String FORM_CHECK = "formCheck";
+    private static final String FORM_TRAIT = "FORM";
 
     private PracticeFeedbackReader() {
     }
@@ -38,13 +40,56 @@ public final class PracticeFeedbackReader {
         if (detail == null || !detail.isObject()) {
             return null;
         }
-        Map<String, String> reasons = reasons(detail.path(TRAIT_RATIONALES));
+        Map<String, String> reasons = withFormReason(reasons(detail.path(TRAIT_RATIONALES)), detail.path(FORM_CHECK));
         List<String> tips = strings(detail.path(TIPS));
         List<PracticeAnswerFeedback.WordMark> marks = wordMarks(detail.path(WORD_MARKS));
         if (reasons.isEmpty() && tips.isEmpty() && marks.isEmpty()) {
             return null;
         }
         return new PracticeAnswerFeedback(reasons, tips, marks);
+    }
+
+    /**
+     * Form of a written answer is counted in code, not by the model, so the model never explains it and the report
+     * would otherwise give a reason for every criterion but the one that can zero the whole answer. The counts the
+     * scorer stored (words, sentences, capitals, punctuation, bullets) are enough to say which rule decided, in the
+     * same order the rubric applies them. It goes first, since a Form of 0 outweighs everything after it.
+     */
+    private static Map<String, String> withFormReason(Map<String, String> reasons, JsonNode formCheck) {
+        if (!formCheck.isObject() || reasons.containsKey(FORM_TRAIT) || !formCheck.path("band").isNumber()) {
+            return reasons;
+        }
+        Map<String, String> ordered = new LinkedHashMap<>();
+        ordered.put(FORM_TRAIT, formReason(formCheck));
+        ordered.putAll(reasons);
+        return ordered;
+    }
+
+    private static String formReason(JsonNode check) {
+        int words = check.path("wordCount").asInt(0);
+        int sentences = check.path("sentenceCount").asInt(0);
+        boolean singleSentence = check.path("requireSingleSentence").asBoolean(false);
+        boolean mechanical = check.path("mechanicalRules").asBoolean(false);
+        if (check.path("band").asInt(0) > 0) {
+            return "Form is met: " + words + " words" + (singleSentence ? " in one sentence." : ".");
+        }
+        if (mechanical && check.path("allCaps").asBoolean(false)) {
+            return "Form is 0 because the response is written entirely in capital letters. A Form of 0 makes the "
+                    + "whole score 0.";
+        }
+        if (mechanical && !check.path("hasPunctuation").asBoolean(true)) {
+            return "Form is 0 because the response has no punctuation. A Form of 0 makes the whole score 0.";
+        }
+        if (mechanical && check.path("bulletOnly").asBoolean(false)) {
+            return "Form is 0 because the response is only bullet points or very short sentences. A Form of 0 makes "
+                    + "the whole score 0.";
+        }
+        if (singleSentence && sentences != 1) {
+            return "Form is 0 because the response must be one single sentence, but it has " + sentences
+                    + " sentences. A Form of 0 makes the whole score 0.";
+        }
+        return "Form is 0 because the response has " + words + " words, outside the allowed length. A Form of 0 "
+                + "makes the whole score 0.";
     }
 
     private static Map<String, String> reasons(JsonNode rationales) {
