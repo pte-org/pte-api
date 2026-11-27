@@ -71,6 +71,7 @@ class ApiInventoryExportTest {
                         "GET /api/v1/question-generation/jobs/{publicId}/live",
                         "GET /api/v1/question-generation/task-types", "GET /api/v1/question-generation/quota",
                         "GET /api/v1/question-generation/presets",
+                        "GET /api/v1/question-generation/presets/cefr-mix",
                         "POST /api/v1/question-generation/batches", "GET /api/v1/question-generation/batches",
                         "GET /api/v1/question-generation/batches/{publicId}",
                         "GET /api/v1/question-generation/batches/{publicId}/questions",

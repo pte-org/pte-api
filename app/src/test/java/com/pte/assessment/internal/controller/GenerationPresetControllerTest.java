@@ -1,5 +1,7 @@
 package com.pte.assessment.internal.controller;
 
+import com.pte.assessment.dto.response.CefrTargetResponse;
+import com.pte.assessment.dto.response.GenerationCefrMixResponse;
 import com.pte.assessment.dto.response.GenerationPresetResponse;
 import com.pte.assessment.internal.constant.GenerationPresetConstants;
 import com.pte.assessment.internal.service.GenerationPresetQueryService;
@@ -21,6 +23,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.Mockito.mock;
@@ -102,5 +105,36 @@ class GenerationPresetControllerTest {
                 .andExpect(result -> org.assertj.core.api.Assertions.assertThat(result.getResponse().getStatus())
                         .isNotEqualTo(200));
         org.mockito.Mockito.verify(service, org.mockito.Mockito.never()).listActivePresets();
+    }
+
+    @Test
+    void anAuthorReadsTheActiveCefrMix() throws Exception {
+        authenticate("ACADEMIC_STAFF", null);
+        when(service.findActiveCefrMix()).thenReturn(Optional.of(new GenerationCefrMixResponse("PTE 22 task type", 5,
+                List.of(new CefrTargetResponse("B1", 50), new CefrTargetResponse("C1", 50)))));
+
+        mvc.perform(get(GenerationPresetConstants.GENERATION_CEFR_MIX_PATH))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.templateName").value("PTE 22 task type"))
+                .andExpect(jsonPath("$.data.templateVersion").value(5))
+                .andExpect(jsonPath("$.data.targets[1].level").value("C1"))
+                .andExpect(jsonPath("$.data.targets[1].percent").value(50));
+    }
+
+    @Test
+    void noCefrMixAnswersNullData() throws Exception {
+        authenticate("PLATFORM_ADMIN", null);
+        when(service.findActiveCefrMix()).thenReturn(Optional.empty());
+
+        mvc.perform(get(GenerationPresetConstants.GENERATION_CEFR_MIX_PATH))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void aTenantRoleIsRefusedTheCefrMix() throws Exception {
+        authenticate("HOST_ADMIN", UUID.randomUUID());
+
+        mvc.perform(get(GenerationPresetConstants.GENERATION_CEFR_MIX_PATH)).andExpect(status().isForbidden());
     }
 }
