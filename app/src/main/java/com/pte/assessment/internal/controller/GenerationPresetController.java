@@ -1,5 +1,6 @@
 package com.pte.assessment.internal.controller;
 
+import com.pte.assessment.dto.response.GenerationCefrMixResponse;
 import com.pte.assessment.dto.response.GenerationPresetResponse;
 import com.pte.assessment.internal.constant.GenerationPresetConstants;
 import com.pte.assessment.internal.service.GenerationPresetQueryService;
@@ -28,5 +29,12 @@ public class GenerationPresetController {
     @PreAuthorize(GenerationPresetConstants.GENERATION_PRESET_AUTHORITY)
     public ApiResponse<List<GenerationPresetResponse>> presets() {
         return ApiResponse.success(presets.listActivePresets());
+    }
+
+    /** Null data when there is no active template or it sets no CEFR mix: the popup then keeps one level. */
+    @GetMapping(GenerationPresetConstants.GENERATION_CEFR_MIX_PATH)
+    @PreAuthorize(GenerationPresetConstants.GENERATION_PRESET_AUTHORITY)
+    public ApiResponse<GenerationCefrMixResponse> cefrMix() {
+        return ApiResponse.success(presets.findActiveCefrMix().orElse(null));
     }
 }

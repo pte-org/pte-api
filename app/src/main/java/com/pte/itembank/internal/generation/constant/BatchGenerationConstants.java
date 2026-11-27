@@ -1,6 +1,7 @@
 package com.pte.itembank.internal.generation.constant;
 
 import java.util.Set;
+import java.util.UUID;
 
 /** Codes, messages, audit actions, result strings and limits of batch question generation. */
 public final class BatchGenerationConstants {
@@ -21,6 +22,10 @@ public final class BatchGenerationConstants {
     public static final String GENERATION_PICTURE_DISABLED = "GENERATION_PICTURE_DISABLED";
     public static final String GENERATION_BATCH_NOT_FOUND = "GENERATION_BATCH_NOT_FOUND";
     public static final String GENERATION_BATCH_NOT_CANCELLABLE = "GENERATION_BATCH_NOT_CANCELLABLE";
+    public static final String GENERATION_BATCH_NOT_PAUSABLE = "GENERATION_BATCH_NOT_PAUSABLE";
+    public static final String GENERATION_BATCH_NOT_RESUMABLE = "GENERATION_BATCH_NOT_RESUMABLE";
+    /** Closing code of a batch cancelled because it stayed paused longer than the configured expiry. */
+    public static final String GENERATION_BATCH_PAUSE_EXPIRED = "GENERATION_BATCH_PAUSE_EXPIRED";
     public static final String GENERATION_JOB_PART_OF_BATCH = "GENERATION_JOB_PART_OF_BATCH";
 
     public static final String GENERATION_BATCH_DISABLED_MESSAGE = "Batch question generation is turned off.";
@@ -32,6 +37,10 @@ public final class BatchGenerationConstants {
             "AI-painted pictures are turned off. Choose a chart instead.";
     public static final String GENERATION_BATCH_NOT_FOUND_MESSAGE = "Generation batch not found.";
     public static final String GENERATION_BATCH_NOT_CANCELLABLE_MESSAGE = "This generation batch already finished.";
+    public static final String GENERATION_BATCH_NOT_PAUSABLE_MESSAGE =
+            "Only a running generation batch can be paused.";
+    public static final String GENERATION_BATCH_NOT_RESUMABLE_MESSAGE =
+            "This generation batch is not paused, or is still stopping. Try again in a moment.";
     public static final String GENERATION_JOB_PART_OF_BATCH_MESSAGE =
             "This job belongs to a batch. Cancel the batch instead.";
 
@@ -47,9 +56,17 @@ public final class BatchGenerationConstants {
     public static final String BATCH_AGGREGATE = "QUESTION_GENERATION_BATCH";
     public static final String BATCH_CREATED = "QUESTION_GENERATION_BATCH_CREATED";
     public static final String BATCH_CANCELLED = "QUESTION_GENERATION_BATCH_CANCELLED";
+    public static final String BATCH_PAUSED = "QUESTION_GENERATION_BATCH_PAUSED";
+    public static final String BATCH_RESUMED = "QUESTION_GENERATION_BATCH_RESUMED";
+    public static final String BATCH_EXPIRED_WHILE_PAUSED = "QUESTION_GENERATION_BATCH_EXPIRED_WHILE_PAUSED";
     public static final String BATCH_DRAFTS_DELETED = "QUESTION_GENERATION_BATCH_DRAFTS_DELETED";
     public static final String BATCH_CREATED_SUMMARY = "rows=%d,items=%d,children=%d";
     public static final String BATCH_CANCELLED_SUMMARY = "status=%s";
+    public static final String BATCH_PAUSE_SUMMARY = "status=%s";
+    public static final String BATCH_EXPIRED_SUMMARY = "status=%s,expiryHours=%d";
+    /** The actor of a change no person made (the paused-batch expiry); the id the audit UI reads as "System". */
+    public static final UUID SYSTEM_ACTOR_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+    public static final String SYSTEM_ROLE = "SYSTEM";
     public static final String BATCH_DRAFTS_DELETED_SUMMARY = "processed=%d,deleted=%d,remaining=%d";
 
     /** Per-question results of a bulk draft delete. */

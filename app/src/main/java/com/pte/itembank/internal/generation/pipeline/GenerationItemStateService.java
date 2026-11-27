@@ -6,6 +6,8 @@ import com.pte.itembank.internal.generation.domain.JobStatus;
 import com.pte.itembank.internal.generation.domain.QuestionGenerationJobItem;
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
+import com.pte.itembank.internal.generation.stop.GenerationStop;
+import com.pte.itembank.internal.generation.stop.GenerationStoppedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,7 +49,30 @@ public class GenerationItemStateService {
     /** True when someone asked to stop the job while this worker holds it; checked before each rewrite. */
     @Transactional(readOnly = true)
     public boolean cancelRequested(JobClaim claim) {
-        return jobs.statusIfLeaseHeld(claim.jobId(), claim.workerId()).contains(JobStatus.CANCELLING);
+        return stopRequested(claim) != null;
+    }
+
+    /**
+     * Why the job must stop, read from the database: the interrupt flag says only that the thread was stopped, not
+     * whether by a cancel or a pause. CANCELLED for a cancel (it wins over a pause), PAUSED for a pause, null when
+     * nobody asked to stop.
+     */
+    @Transactional(readOnly = true)
+    public ItemOutcome stopRequested(JobClaim claim) {
+        List<JobStatus> held = jobs.statusIfLeaseHeld(claim.jobId(), claim.workerId());
+        if (held.contains(JobStatus.CANCELLING)) {
+            return ItemOutcome.CANCELLED;
+        }
+        return held.contains(JobStatus.PAUSING) ? ItemOutcome.PAUSED : null;
+    }
+
+    /** Ends the item at once when its job was asked to stop, here or (seen in the job row) on another instance. */
+    @Transactional(readOnly = true)
+    public void throwIfStopRequested(JobClaim claim) {
+        GenerationStop.throwIfRequested();
+        if (stopRequested(claim) != null) {
+            throw new GenerationStoppedException();
+        }
     }
 
     /** The question went into the form it was asked from; nothing is saved. */
@@ -57,8 +82,15 @@ public class GenerationItemStateService {
         jobs.refreshCounters(claim.jobId());
     }
 
+    /**
+     * Not when the job was asked to stop: the provider call then failed because a person cancelled or paused the
+     * job, not because of the question. The runner settles the item (CANCELLED, or QUEUED again for a pause).
+     */
     @Transactional
     public void fail(JobClaim claim, int index, String code, String note) {
+        if (Thread.currentThread().isInterrupted() || GenerationStop.isRequested()) {
+            return;
+        }
         items.fail(claim.jobId(), index, code, truncate(note), claim.workerId(), clock.instant());
         jobs.refreshCounters(claim.jobId());
     }

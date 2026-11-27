@@ -24,7 +24,13 @@ public enum QuestionGenerationLimit {
             "Generation jobs that may run at the same time"),
     /** One write-review round costs up to five calls, so fewer would allow no round at all. */
     CALLS_PER_ITEM("question_generation_max_calls_per_item", 40, 5, 200, "calls",
-            "AI calls one generated question may use (writing, review, media)");
+            "AI calls one generated question may use (writing, review, media)"),
+    /**
+     * 0 keeps a paused batch until a person resumes or cancels it. The expiry is read when it is checked, so a new
+     * value applies to the batches already paused too.
+     */
+    PAUSED_BATCH_EXPIRY_HOURS("question_generation_paused_batch_expiry_hours", 24, 0, 168, "hours",
+            "Hours a paused generation batch is kept before it is cancelled (0 keeps it); applies to batches already paused");
 
     private final String key;
     private final int defaultValue;

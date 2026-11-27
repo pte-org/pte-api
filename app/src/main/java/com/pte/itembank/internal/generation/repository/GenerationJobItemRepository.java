@@ -71,6 +71,12 @@ public interface GenerationJobItemRepository extends JpaRepository<QuestionGener
     int failOpen(@Param("jobId") Long jobId, @Param("code") String code, @Param("workerId") String workerId,
                  @Param("now") Instant now);
 
+    /** A paused job's unfinished questions start over when it runs again: back to QUEUED. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update " + ITEM + " i set i.stage = " + STAGE + ".QUEUED, i.updatedAt = :now "
+            + "where i.jobId = :jobId" + OPEN_STAGES)
+    int requeueOpen(@Param("jobId") Long jobId, @Param("now") Instant now);
+
     /** For a job nobody holds (queued, or whose worker died): no lease to check. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + ITEM + " i set i.stage = " + STAGE + ".CANCELLED, i.updatedAt = :now "

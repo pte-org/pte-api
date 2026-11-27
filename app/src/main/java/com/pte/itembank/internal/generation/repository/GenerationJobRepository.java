@@ -70,7 +70,7 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
      */
     @Query(value = """
             select id from question_generation_jobs
-            where deleted = false and status in ('RUNNING', 'CANCELLING') and lease_until < :now
+            where deleted = false and status in ('RUNNING', 'CANCELLING', 'PAUSING') and lease_until < :now
             order by lease_until
             limit 1
             """, nativeQuery = true)
@@ -87,7 +87,7 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
 
     /** Jobs a worker currently holds a live lease on: what the concurrency cap counts. */
     @Query("select count(j) from " + JOB + " j where j.deleted = false and j.status in (" + STATUS + ".RUNNING, "
-            + STATUS + ".CANCELLING) and j.leaseUntil >= :now")
+            + STATUS + ".CANCELLING, " + STATUS + ".PAUSING) and j.leaseUntil >= :now")
     long countLiveLeases(@Param("now") Instant now);
 
     @Query("select j.batchId from " + JOB + " j where j.id = :id")
@@ -108,7 +108,7 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + JOB + " j set j.leaseUntil = :leaseUntil where j.id = :id and j.workerId = :workerId "
-            + "and j.status in (" + STATUS + ".RUNNING, " + STATUS + ".CANCELLING)")
+            + "and j.status in (" + STATUS + ".RUNNING, " + STATUS + ".CANCELLING, " + STATUS + ".PAUSING)")
     int renewLease(@Param("id") Long id, @Param("workerId") String workerId,
                    @Param("leaseUntil") Instant leaseUntil);
 
@@ -147,8 +147,36 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + JOB + " j set j.status = " + STATUS + ".CANCELLING "
-            + "where j.publicId = :publicId and j.status in (" + STATUS + ".RUNNING, " + STATUS + ".CANCELLING)")
+            + "where j.publicId = :publicId and j.status in (" + STATUS + ".RUNNING, " + STATUS + ".CANCELLING, "
+            + STATUS + ".PAUSING)")
     int markCancelling(@Param("publicId") UUID publicId);
+
+    /** A pause asked of a running child; its worker stops it and hands it back to PENDING. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update " + JOB + " j set j.status = " + STATUS + ".PAUSING "
+            + "where j.publicId = :publicId and j.status = " + STATUS + ".RUNNING")
+    int markPausing(@Param("publicId") UUID publicId);
+
+    /** Children queued but not claimed yet go back to waiting when their batch is paused. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update " + JOB + " j set j.status = " + STATUS + ".PENDING "
+            + "where j.batchId = :batchId and j.status = " + STATUS + ".QUEUED")
+    int requeueQueued(@Param("batchId") Long batchId);
+
+    /**
+     * The worker stopped a paused child: back to PENDING, lease dropped. started_at stays, so its questions keep
+     * counting against the quota (only a child that never ran is refunded).
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update " + JOB + " j set j.status = " + STATUS + ".PENDING, j.workerId = null, j.leaseUntil = null "
+            + "where j.id = :id and j.workerId = :workerId and j.status = " + STATUS + ".PAUSING")
+    int release(@Param("id") Long id, @Param("workerId") String workerId);
+
+    /** A pause whose worker died: nobody is left to stop the job, so it goes back to waiting. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update " + JOB + " j set j.status = " + STATUS + ".PENDING, j.workerId = null, j.leaseUntil = null "
+            + "where j.id = :id and j.status = " + STATUS + ".PAUSING")
+    int releaseStalePausing(@Param("id") Long id);
 
     /** A cancel request whose worker died: nobody is left to honour it, so close the job. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
@@ -159,7 +187,7 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + JOB + " j set j.status = :status, j.failureCode = :failureCode, j.finishedAt = :now "
             + "where j.id = :id and j.workerId = :workerId "
-            + "and j.status in (" + STATUS + ".RUNNING, " + STATUS + ".CANCELLING)")
+            + "and j.status in (" + STATUS + ".RUNNING, " + STATUS + ".CANCELLING, " + STATUS + ".PAUSING)")
     int finish(@Param("id") Long id, @Param("workerId") String workerId, @Param("status") JobStatus status,
                @Param("failureCode") String failureCode, @Param("now") Instant now);
 
@@ -173,6 +201,6 @@ public interface GenerationJobRepository extends JpaRepository<QuestionGeneratio
 
     /** Status of the job when {@code workerId} still holds its lease; empty when the lease was lost. */
     @Query("select j.status from " + JOB + " j where j.id = :id and j.workerId = :workerId "
-            + "and j.status in (" + STATUS + ".RUNNING, " + STATUS + ".CANCELLING)")
+            + "and j.status in (" + STATUS + ".RUNNING, " + STATUS + ".CANCELLING, " + STATUS + ".PAUSING)")
     List<JobStatus> statusIfLeaseHeld(@Param("id") Long id, @Param("workerId") String workerId);
 }

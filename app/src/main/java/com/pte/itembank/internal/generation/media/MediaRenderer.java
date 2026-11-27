@@ -9,6 +9,7 @@ import com.pte.itembank.internal.generation.llm.LlmGateway;
 import com.pte.itembank.internal.generation.llm.LlmProviderException;
 import com.pte.itembank.internal.generation.prompt.PictureSettings;
 import com.pte.itembank.internal.generation.prompt.PromptRegistry;
+import com.pte.itembank.internal.generation.stop.GenerationStoppedException;
 import com.pte.media.MediaService;
 import com.pte.shared.security.CurrentUser;
 import org.slf4j.Logger;
@@ -86,8 +87,8 @@ public class MediaRenderer {
                 case ItemDraft.PictureDraft d -> Optional.of(paint(d, owner, poolName));
                 default -> Optional.empty();
             };
-        } catch (GenerationMediaException failure) {
-            throw failure;
+        } catch (GenerationMediaException | GenerationStoppedException passOn) {
+            throw passOn;
         } catch (RuntimeException failure) {
             // Speech, drawing and storage all end here: one media code, and only the failure class is logged.
             LOG.warn("Media step failed: errorType={}", failure.getClass().getSimpleName());

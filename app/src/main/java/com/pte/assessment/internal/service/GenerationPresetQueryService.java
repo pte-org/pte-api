@@ -1,9 +1,12 @@
 package com.pte.assessment.internal.service;
 
 import com.pte.assessment.ExamDefinitionService;
+import com.pte.assessment.dto.response.CefrTargetResponse;
 import com.pte.assessment.dto.response.ExamDefinitionItemResponse;
 import com.pte.assessment.dto.response.ExamDefinitionResponse;
+import com.pte.assessment.dto.response.GenerationCefrMixResponse;
 import com.pte.assessment.dto.response.GenerationPresetResponse;
+import com.pte.itembank.domain.enums.CefrLevel;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,6 +14,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The AI-generation presets: one row per task type of the active platform exam template with its {@code maxCount}
@@ -29,6 +33,22 @@ public class GenerationPresetQueryService {
     @Transactional(readOnly = true)
     public List<GenerationPresetResponse> listActivePresets() {
         return examDefinitions.findActive().map(GenerationPresetQueryService::presetsOf).orElse(List.of());
+    }
+
+    /** The active template's CEFR mix, lowest level first; empty when there is none or it sets no share. */
+    @Transactional(readOnly = true)
+    public Optional<GenerationCefrMixResponse> findActiveCefrMix() {
+        return examDefinitions.findActive().flatMap(GenerationPresetQueryService::cefrMixOf);
+    }
+
+    private static Optional<GenerationCefrMixResponse> cefrMixOf(ExamDefinitionResponse template) {
+        List<CefrTargetResponse> targets = template.cefrTargets() == null ? List.of()
+                : template.cefrTargets().stream()
+                        .filter(target -> target.percent() > 0)
+                        .sorted(Comparator.comparing(target -> CefrLevel.valueOf(target.level())))
+                        .toList();
+        return targets.isEmpty() ? Optional.empty()
+                : Optional.of(new GenerationCefrMixResponse(template.name(), template.version(), targets));
     }
 
     private static List<GenerationPresetResponse> presetsOf(ExamDefinitionResponse template) {

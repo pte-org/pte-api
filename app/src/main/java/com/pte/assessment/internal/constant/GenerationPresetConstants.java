@@ -9,6 +9,9 @@ public final class GenerationPresetConstants {
 
     public static final String GENERATION_PRESETS_PATH = "/api/v1/question-generation/presets";
 
+    /** The active template's CEFR mix, which the "full exam" preset spreads its questions over. */
+    public static final String GENERATION_CEFR_MIX_PATH = GENERATION_PRESETS_PATH + "/cefr-mix";
+
     /**
      * The platform bank authors, the same roles as AI question generation (itembank's generation access policy;
      * an itembank test keeps both lists equal, since itembank internals cannot be imported here).

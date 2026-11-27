@@ -37,7 +37,7 @@ public class AiOverviewService {
                         GenerationLimits.isUnlimited(allowance.maxItemsPerUserPerDay()),
                         GenerationLimits.isUnlimited(allowance.maxItemsPerDayGlobal()),
                         GenerationLimits.isUnlimited(allowance.maxItemsPerBatch()),
-                        allowance.effectiveMaxItemsPerBatch()));
+                        allowance.effectiveMaxItemsPerBatch(), allowance.pausedBatchExpiryHours()));
     }
 
     private static boolean hasText(String value) {

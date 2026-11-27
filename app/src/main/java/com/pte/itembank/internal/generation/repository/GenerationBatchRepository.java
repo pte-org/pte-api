@@ -45,9 +45,10 @@ public interface GenerationBatchRepository extends JpaRepository<QuestionGenerat
     /** Open batches none of whose children is still open: the reconciler's safety net for a missed terminal hook. */
     @Query(value = """
             select b.id from question_generation_batches b
-            where b.status in ('QUEUED', 'RUNNING', 'CANCELLING')
+            where b.status in ('QUEUED', 'RUNNING', 'CANCELLING', 'PAUSING', 'PAUSED')
               and not exists (select 1 from question_generation_jobs j
-                              where j.batch_id = b.id and j.status in ('PENDING', 'QUEUED', 'RUNNING', 'CANCELLING'))
+                              where j.batch_id = b.id
+                                and j.status in ('PENDING', 'QUEUED', 'RUNNING', 'CANCELLING', 'PAUSING'))
             """, nativeQuery = true)
     List<Long> findOpenIdsWithoutOpenChild();
 
@@ -63,22 +64,56 @@ public interface GenerationBatchRepository extends JpaRepository<QuestionGenerat
             where b.status in ('QUEUED', 'RUNNING', 'CANCELLING')
               and exists (select 1 from question_generation_jobs j where j.batch_id = b.id and j.status = 'PENDING')
               and not exists (select 1 from question_generation_jobs j
-                              where j.batch_id = b.id and j.status in ('QUEUED', 'RUNNING', 'CANCELLING'))
+                              where j.batch_id = b.id and j.status in ('QUEUED', 'RUNNING', 'CANCELLING', 'PAUSING'))
             """, nativeQuery = true)
     List<Long> findOpenIdsWithOnlyPendingChildren();
+
+    /** Batches being paused whose children have all stopped: the reconciler marks them PAUSED. */
+    @Query(value = """
+            select b.id from question_generation_batches b
+            where b.status = 'PAUSING'
+              and not exists (select 1 from question_generation_jobs j
+                              where j.batch_id = b.id and j.status in ('RUNNING', 'CANCELLING', 'PAUSING'))
+            """, nativeQuery = true)
+    List<Long> findPausingIdsWithoutLeasedChild();
+
+    /** Batches paused before {@code cutoff}: the expiry cancels them. */
+    @Query("select b.id from " + BATCH + " b where b.status = " + BATCH_STATUS + ".PAUSED and b.pausedAt < :cutoff")
+    List<Long> findPausedBefore(@Param("cutoff") Instant cutoff);
+
+    /** Pause requested: a running batch becomes PAUSING until its running children have stopped. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update " + BATCH + " b set b.status = " + BATCH_STATUS + ".PAUSING, b.pausedAt = :now, "
+            + "b.updatedAt = :now where b.id = :id and b.status in (" + BATCH_STATUS + ".QUEUED, " + BATCH_STATUS
+            + ".RUNNING)")
+    int requestPause(@Param("id") Long id, @Param("now") Instant now);
+
+    /** Every child has stopped. No-op unless the batch is still being paused (a cancel may have won). */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update " + BATCH + " b set b.status = " + BATCH_STATUS + ".PAUSED, b.updatedAt = :now "
+            + "where b.id = :id and b.status = " + BATCH_STATUS + ".PAUSING")
+    int markPaused(@Param("id") Long id, @Param("now") Instant now);
+
+    /** A paused batch runs again (QUEUED when none of its children ever started). */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update " + BATCH + " b set b.status = case when b.startedAt is null then " + BATCH_STATUS + ".QUEUED "
+            + "else " + BATCH_STATUS + ".RUNNING end, b.pausedAt = null, b.updatedAt = :now "
+            + "where b.id = :id and b.status = " + BATCH_STATUS + ".PAUSED")
+    int resume(@Param("id") Long id, @Param("now") Instant now);
 
     /** Cancel requested: an open batch becomes CANCELLING until its running child stops. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + BATCH + " b set b.cancelRequested = true, b.status = " + BATCH_STATUS + ".CANCELLING, "
             + "b.updatedAt = :now where b.id = :id and b.status in (" + BATCH_STATUS + ".QUEUED, " + BATCH_STATUS
-            + ".RUNNING)")
+            + ".RUNNING, " + BATCH_STATUS + ".PAUSING, " + BATCH_STATUS + ".PAUSED)")
     int requestCancel(@Param("id") Long id, @Param("now") Instant now);
 
     /** Final status, computed from the children. Guarded: a batch is closed once. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update " + BATCH + " b set b.status = :status, b.failureCode = coalesce(:failureCode, b.failureCode), "
             + "b.finishedAt = :now, b.updatedAt = :now where b.id = :id and b.status in (" + BATCH_STATUS + ".QUEUED, "
-            + BATCH_STATUS + ".RUNNING, " + BATCH_STATUS + ".CANCELLING)")
+            + BATCH_STATUS + ".RUNNING, " + BATCH_STATUS + ".CANCELLING, " + BATCH_STATUS + ".PAUSING, "
+            + BATCH_STATUS + ".PAUSED)")
     int close(@Param("id") Long id, @Param("status") BatchStatus status, @Param("failureCode") String failureCode,
               @Param("now") Instant now);
 

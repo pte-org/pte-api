@@ -46,6 +46,12 @@ public class GenerationLimits {
         return value(QuestionGenerationLimit.CALLS_PER_ITEM, properties.getLimits().getMaxCallsPerItem());
     }
 
+    /** Hours a paused batch is kept before it is cancelled; 0 (unlimited) keeps it. */
+    public int pausedBatchExpiryHours() {
+        return value(QuestionGenerationLimit.PAUSED_BATCH_EXPIRY_HOURS,
+                properties.getLimits().getPausedBatchExpiryHours());
+    }
+
     /** The batch cap in force: the batch limit, or the hard cap when it is unlimited (0). */
     public int effectiveMaxItemsPerBatch() {
         int configured = maxItemsPerBatch();
@@ -60,5 +66,10 @@ public class GenerationLimits {
 
     private int value(QuestionGenerationLimit limit, int fallback) {
         return settings.questionGenerationLimit(limit, fallback);
+    }
+
+    /** AI-painted Describe Image pictures are on in this deployment; when off, only charts are drawn. */
+    public boolean pictureEnabled() {
+        return properties.isPictureEnabled();
     }
 }

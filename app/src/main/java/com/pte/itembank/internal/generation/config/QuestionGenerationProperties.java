@@ -124,6 +124,9 @@ public class QuestionGenerationProperties {
          */
         @Min(1)
         private int maxCallsPerItem = 15;
+        /** Hours a paused batch is kept before it is cancelled; 0 keeps it. The admin setting overrides it. */
+        @Min(0)
+        private int pausedBatchExpiryHours = 24;
         /**
          * Most provider calls one round can make (generation, a JSON retry, a rule rewrite, its JSON retry, a review).
          * Another round starts only while this many calls are left, and the allowance divided by it caps the rounds.

@@ -110,15 +110,30 @@ public class QuestionGenerationBatchService {
     public GenerationBatchResponse cancel(UUID publicId, CurrentUser caller) {
         Long batchId = queries.require(publicId, caller).getId();
         batches.findByIdForUpdate(batchId);
-        Instant now = clock.instant();
-        // Decided by the guarded update, not by the entity read before the lock (it may be stale).
-        if (batches.requestCancel(batchId, now) == 0) {
+        if (!cancelLocked(batchId, null)) {
             BatchStatus current = batches.findById(batchId).orElseThrow().getStatus();
             if (current == BatchStatus.CANCELLING || current == BatchStatus.CANCELLED) {
                 return queries.detail(batchId);
             }
             throw new GenerationJobConflictException(BatchGenerationConstants.GENERATION_BATCH_NOT_CANCELLABLE,
                     BatchGenerationConstants.GENERATION_BATCH_NOT_CANCELLABLE_MESSAGE);
+        }
+        audit.record(caller, BatchGenerationConstants.BATCH_AGGREGATE, publicId.toString(),
+                BatchGenerationConstants.BATCH_CANCELLED,
+                String.format(BatchGenerationConstants.BATCH_CANCELLED_SUMMARY,
+                        batches.findById(batchId).orElseThrow().getStatus()));
+        return queries.detail(batchId);
+    }
+
+    /**
+     * The cancel itself, for a batch whose row the caller has locked: false when the batch is not cancellable
+     * (decided by the guarded update, not by an entity read before the lock). {@code closingCode} is kept on the
+     * batch when it closes here (the paused-batch expiry); a person's cancel passes null.
+     */
+    boolean cancelLocked(long batchId, String closingCode) {
+        Instant now = clock.instant();
+        if (batches.requestCancel(batchId, now) == 0) {
+            return false;
         }
         items.cancelOpenUnleasedByBatch(batchId, now);
         jobs.cancelPending(batchId, now, null);
@@ -128,13 +143,9 @@ public class QuestionGenerationBatchService {
                 .forEach(child -> events.publishEvent(new GenerationCancelRequested(child.getPublicId())));
         batches.refreshCounters(batchId, now);
         if (!jobs.existsByBatchIdAndStatusIn(batchId, JobStatus.OPEN)) {
-            batches.close(batchId, BatchStatus.CANCELLED, null, now);
+            batches.close(batchId, BatchStatus.CANCELLED, closingCode, now);
         }
-        audit.record(caller, BatchGenerationConstants.BATCH_AGGREGATE, publicId.toString(),
-                BatchGenerationConstants.BATCH_CANCELLED,
-                String.format(BatchGenerationConstants.BATCH_CANCELLED_SUMMARY,
-                        batches.findById(batchId).orElseThrow().getStatus()));
-        return queries.detail(batchId);
+        return true;
     }
 
     /** One open saving unit per writer: an open batch, or an open job that saves to the bank (previews are exempt). */

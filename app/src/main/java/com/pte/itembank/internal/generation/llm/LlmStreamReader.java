@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.generation.llm;
 
+import com.pte.itembank.internal.generation.stop.GenerationStop;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -40,7 +41,19 @@ final class LlmStreamReader {
         this.jsonMapper = jsonMapper;
     }
 
+    /**
+     * A stop closes the body, so the read ends at once. Whatever came before is not an answer, and no more text goes
+     * to the live view.
+     */
     Result read(InputStream body, TokenSink sink) throws IOException {
+        try (GenerationStop.Watch watch = GenerationStop.watch(body)) {
+            Result result = readLines(body, sink);
+            GenerationStop.throwIfRequested();
+            return result;
+        }
+    }
+
+    private Result readLines(InputStream body, TokenSink sink) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8));
         StringBuilder content = new StringBuilder();
         StringBuilder plainBody = new StringBuilder();
@@ -48,6 +61,7 @@ final class LlmStreamReader {
         JsonNode usage = jsonMapper.createObjectNode();
         String line;
         while ((line = reader.readLine()) != null) {
+            GenerationStop.throwIfRequested();
             if (!line.startsWith(DATA_PREFIX)) {
                 // Blank separators and ": comment" keep-alives of a stream; the whole body of a plain answer.
                 if (!streamed) {

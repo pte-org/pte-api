@@ -11,6 +11,7 @@ import com.pte.itembank.internal.generation.dto.GenerationMetaDto;
 import com.pte.itembank.internal.generation.repository.GenerationJobItemRepository;
 import com.pte.itembank.internal.generation.repository.GenerationJobRepository;
 import com.pte.itembank.internal.generation.review.ReviewVerdict;
+import com.pte.itembank.internal.generation.stop.GenerationStop;
 import com.pte.itembank.internal.repository.QuestionRepository;
 import com.pte.shared.security.CurrentUser;
 import org.springframework.stereotype.Service;
@@ -80,6 +81,10 @@ public class GeneratedQuestionWriter {
             // The question in flight is discarded: cancelling means no more drafts appear.
             items.cancelOpen(claim.jobId(), claim.workerId(), now);
             return ItemOutcome.CANCELLED;
+        }
+        if (held.get(0) == JobStatus.PAUSING || GenerationStop.isRequested()) {
+            // Paused while the question was made: it is written again when the batch is resumed.
+            return ItemOutcome.STOPPED;
         }
         Optional<Question> existing = questions.findByGenerationJobPublicIdAndGenerationItemIndex(
                 claim.jobPublicId(), index);

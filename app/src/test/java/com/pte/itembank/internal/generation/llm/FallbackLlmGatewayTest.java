@@ -1,5 +1,8 @@
 package com.pte.itembank.internal.generation.llm;
 
+import com.pte.itembank.internal.generation.stop.GenerationStop;
+import com.pte.itembank.internal.generation.stop.GenerationStoppedException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -15,6 +18,11 @@ class FallbackLlmGatewayTest {
     private final LlmGateway primary = mock(LlmGateway.class);
     private final LlmGateway usual = mock(LlmGateway.class);
     private final FallbackLlmGateway gateway = new FallbackLlmGateway(primary, usual);
+
+    @AfterEach
+    void unbind() {
+        GenerationStop.unbind();
+    }
 
     @Test
     void thePrimaryAnswersWhenItCan() {
@@ -50,5 +58,19 @@ class FallbackLlmGatewayTest {
         assertThatThrownBy(() -> gateway.completeJson(LlmRole.GENERATOR, "s", "u"))
                 .isInstanceOfSatisfying(LlmProviderException.class,
                         e -> assertThat(e.getType()).isEqualTo(LlmFailureType.EMPTY_RESPONSE));
+    }
+
+    @Test
+    void aStoppedJobDoesNotAskTheUsualGateway() {
+        GenerationStop stop = new GenerationStop();
+        stop.bind();
+        when(primary.completeJson(LlmRole.GENERATOR, "s", "u")).thenAnswer(call -> {
+            stop.request(); // a pause broke the call, and the provider reported it as an outage
+            throw new LlmProviderException(LlmFailureType.UNAVAILABLE);
+        });
+
+        assertThatThrownBy(() -> gateway.completeJson(LlmRole.GENERATOR, "s", "u"))
+                .isInstanceOf(GenerationStoppedException.class);
+        verify(usual, never()).completeJson(any(), any(), any());
     }
 }

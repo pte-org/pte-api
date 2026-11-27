@@ -358,6 +358,7 @@ itembank:
       # Prompt test runs one user may start in a day; each run is a real provider call.
       max-prompt-tests-per-user-per-day: 20
       max-calls-per-item: ${QUESTION_GEN_MAX_CALLS_PER_ITEM:15}
+      paused-batch-expiry-hours: ${QUESTION_GEN_BATCH_PAUSED_EXPIRY_HOURS:24}
       max-calls-per-round: ${QUESTION_GEN_MAX_CALLS_PER_ROUND:5}
       consecutive-provider-failures-to-stop: ${QUESTION_GEN_CONSECUTIVE_FAILURES_TO_STOP:3}
     worker:

@@ -81,7 +81,7 @@ class QuestionGenerationBatchControllerTest {
                 Instant.parse("2026-11-17T10:00:00Z"), null, null,
                 List.of(new BatchRow("READ_ALOUD", CefrLevel.B2, 25, List.of("climate"), ImageKind.AUTO)),
                 List.of(new GenerationBatchChildResponse(child, 0, 0, "READ_ALOUD", "climate", 10, "QUEUED", 0, 0,
-                        null, null, null)));
+                        null, null, null)), null, null);
     }
 
     @Test
