@@ -31,6 +31,7 @@ public class BatchReconciler {
     public void tick() {
         Set<Long> suspects = new LinkedHashSet<>(batches.findOpenIdsWithoutOpenChild());
         suspects.addAll(batches.findOpenIdsWithOnlyPendingChildren());
+        suspects.addAll(batches.findPausingIdsWithoutLeasedChild());
         suspects.forEach(chaining::reconcile);
     }
 }

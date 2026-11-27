@@ -98,7 +98,25 @@ public class JobLeaseService {
         if (held.isEmpty()) {
             return LeaseState.LOST;
         }
-        return held.get(0) == JobStatus.CANCELLING ? LeaseState.CANCEL_REQUESTED : LeaseState.HELD;
+        return switch (held.get(0)) {
+            case CANCELLING -> LeaseState.CANCEL_REQUESTED;
+            case PAUSING -> LeaseState.PAUSE_REQUESTED;
+            default -> LeaseState.HELD;
+        };
+    }
+
+    /**
+     * Hands a paused job back: its unfinished questions start over later (QUEUED), the job waits again (PENDING)
+     * without a lease, and its batch becomes PAUSED once no child holds a lease. Batch row first, like finish.
+     */
+    @Transactional
+    public void release(JobClaim claim) {
+        Long batchId = lockBatchOf(claim.jobId());
+        items.requeueOpen(claim.jobId(), clock.instant());
+        jobs.refreshCounters(claim.jobId());
+        if (jobs.release(claim.jobId(), claim.workerId()) == 1 && batchId != null) {
+            chaining.onChildPaused(batchId);
+        }
     }
 
     /**
@@ -134,6 +152,15 @@ public class JobLeaseService {
             jobs.refreshCounters(jobId);
             if (closed == 1 && batchId != null) {
                 chaining.onChildTerminal(batchId, jobId);
+            }
+            return Optional.empty();
+        }
+        if (job.getStatus() == JobStatus.PAUSING) {
+            // A pause whose worker died: nobody is left to stop the job, so it goes back to waiting.
+            Long batchId = lockBatchOf(jobId);
+            items.requeueOpen(jobId, now);
+            if (jobs.releaseStalePausing(jobId) == 1 && batchId != null) {
+                chaining.onChildPaused(batchId);
             }
             return Optional.empty();
         }

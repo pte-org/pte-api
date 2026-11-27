@@ -3,6 +3,7 @@ package com.pte.itembank.internal.generation.media;
 import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
 import com.pte.itembank.internal.generation.llm.LlmFailureType;
 import com.pte.itembank.internal.generation.llm.LlmProviderException;
+import com.pte.itembank.internal.generation.stop.GenerationStop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -86,6 +87,7 @@ public class KokoroSpeechClient {
         } catch (LlmProviderException failure) {
             throw failure;
         } catch (RestClientException failure) {
+            GenerationStop.throwIfRequested(); // stopped by a person, not a speech outage
             LOG.warn("Kokoro call failed: errorType={}", failure.getClass().getSimpleName());
             throw new LlmProviderException(LlmFailureType.UNAVAILABLE);
         }

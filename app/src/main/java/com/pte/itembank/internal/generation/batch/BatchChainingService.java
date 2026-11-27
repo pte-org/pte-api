@@ -78,6 +78,8 @@ public class BatchChainingService {
         Instant now = clock.instant();
         if (batch.isCancelRequested()) {
             stopWaitingChildren(batchId, null, now);
+        } else if (BatchStatus.HALTED.contains(batch.getStatus())) {
+            markPausedIfStopped(batchId, now);
         } else if (topUp(batchId) > 0) {
             LOG.warn("Batch repaired, next children queued: batchId={}", batchId);
             return;
@@ -98,6 +100,9 @@ public class BatchChainingService {
                 ? job.getFailureCode() : null;
         if (batch.isCancelRequested() || fatalCode != null) {
             stopWaitingChildren(batchId, fatalCode, now);
+        } else if (BatchStatus.HALTED.contains(batch.getStatus())) {
+            // Paused: nothing new starts. The batch is PAUSED once no child holds a lease, closed if none is left.
+            markPausedIfStopped(batchId, now);
         } else if (topUp(batchId) > 0) {
             batches.refreshCounters(batchId, now);
             return;
@@ -113,6 +118,32 @@ public class BatchChainingService {
         long open = jobs.countByBatchIdAndStatusIn(batchId, JobStatus.ACTIVE);
         int free = (int) Math.max(0, limits.maxConcurrentJobs() - open);
         return free == 0 ? 0 : jobs.promoteNext(batchId, free);
+    }
+
+    /**
+     * A paused child was handed back to waiting (its worker stopped it, or its worker died while stopping it): the
+     * batch becomes PAUSED once none of its children holds a lease. Runs in the caller's transaction, which has
+     * locked the batch row.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void onChildPaused(long batchId) {
+        Instant now = clock.instant();
+        markPausedIfStopped(batchId, now);
+        batches.refreshCounters(batchId, now);
+    }
+
+    /** A paused batch runs again: its next waiting children are queued, or it closes when nothing is left. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void onResumed(long batchId) {
+        if (topUp(batchId) == 0) {
+            closeIfDone(batchId, null, clock.instant());
+        }
+    }
+
+    private void markPausedIfStopped(long batchId, Instant now) {
+        if (!jobs.existsByBatchIdAndStatusIn(batchId, JobStatus.LEASED)) {
+            batches.markPaused(batchId, now);
+        }
     }
 
     /** Items first: they are selected through the status of their (still waiting) child. */

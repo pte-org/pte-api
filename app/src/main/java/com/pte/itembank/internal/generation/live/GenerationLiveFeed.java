@@ -76,6 +76,11 @@ public class GenerationLiveFeed {
         registry.open(jobPublicId).itemEnded(index, registry.clock().instant());
     }
 
+    /** A worker took the job; a paused job run again starts a fresh live state (see {@link LiveJobRegistry#start}). */
+    public void jobStarted(UUID jobPublicId) {
+        registry.start(jobPublicId);
+    }
+
     public void jobEnded(UUID jobPublicId) {
         registry.open(jobPublicId).finish(registry.clock().instant());
     }

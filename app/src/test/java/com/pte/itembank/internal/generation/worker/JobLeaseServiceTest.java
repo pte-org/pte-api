@@ -271,6 +271,9 @@ class JobLeaseServiceTest {
         when(jobs.statusIfLeaseHeld(5L, "worker-1")).thenReturn(List.of(JobStatus.CANCELLING));
         assertThat(service.leaseState(claim)).isEqualTo(LeaseState.CANCEL_REQUESTED);
 
+        when(jobs.statusIfLeaseHeld(5L, "worker-1")).thenReturn(List.of(JobStatus.PAUSING));
+        assertThat(service.leaseState(claim)).isEqualTo(LeaseState.PAUSE_REQUESTED);
+
         when(jobs.statusIfLeaseHeld(5L, "worker-1")).thenReturn(List.of());
         assertThat(service.leaseState(claim)).isEqualTo(LeaseState.LOST);
     }
@@ -367,5 +370,44 @@ class JobLeaseServiceTest {
         order.verify(batches).findByIdForUpdate(40L);
         order.verify(jobs).finishStaleCancelling(5L, NOW);
         order.verify(chaining).onChildTerminal(40L, 5L);
+    }
+
+    @Test
+    void aReleasedPausedChildRequeuesItsQuestionsAndLetsItsBatchSettle() {
+        when(jobs.findBatchIdById(5L)).thenReturn(List.of(40L));
+        when(jobs.release(5L, "worker-1")).thenReturn(1);
+
+        service.release(claim);
+
+        InOrder order = inOrder(batches, items, jobs, chaining);
+        order.verify(batches).findByIdForUpdate(40L);
+        order.verify(items).requeueOpen(5L, NOW);
+        order.verify(jobs).release(5L, "worker-1");
+        order.verify(chaining).onChildPaused(40L);
+        verify(jobs, never()).finish(anyLong(), any(), any(), any(), any());
+    }
+
+    @Test
+    void aReleaseThatLostItsLeaseLeavesTheBatchAlone() {
+        when(jobs.findBatchIdById(5L)).thenReturn(List.of(40L));
+        when(jobs.release(5L, "worker-1")).thenReturn(0);
+
+        service.release(claim);
+
+        verify(chaining, never()).onChildPaused(anyLong());
+    }
+
+    @Test
+    void aPauseWhoseWorkerDiedGoesBackToWaitingNotRunning() {
+        when(jobs.findNextResumable(NOW)).thenReturn(List.of(5L));
+        when(jobs.findById(5L)).thenReturn(Optional.of(job(JobStatus.PAUSING)));
+        when(jobs.findBatchIdById(5L)).thenReturn(List.of(40L));
+        when(jobs.releaseStalePausing(5L)).thenReturn(1);
+
+        assertThat(service.claimNext("worker-2")).isEmpty();
+
+        verify(items).requeueOpen(5L, NOW);
+        verify(chaining).onChildPaused(40L);
+        verify(jobs, never()).markRunning(anyLong(), any(), any(), any());
     }
 }

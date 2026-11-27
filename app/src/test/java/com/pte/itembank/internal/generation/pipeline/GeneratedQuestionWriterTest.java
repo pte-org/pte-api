@@ -113,6 +113,15 @@ class GeneratedQuestionWriterTest {
     }
 
     @Test
+    void aPausedJobSavesNothingAndLeavesTheItemToTheRunner() {
+        when(jobs.statusIfLeaseHeld(5L, "worker-1")).thenReturn(List.of(JobStatus.PAUSING));
+
+        assertThat(writer.save(claim, admin, 0, item, null)).isEqualTo(ItemOutcome.STOPPED);
+        verify(itembank, never()).create(any(), any());
+        verify(items, never()).cancelOpen(any(), any(), any());
+    }
+
+    @Test
     void aSlotThatAlreadyHasAQuestionIsLinkedNotCreatedAgain() {
         Question already = new Question();
         UUID existingId = UUID.randomUUID();

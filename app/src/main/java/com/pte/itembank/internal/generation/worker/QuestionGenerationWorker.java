@@ -3,6 +3,7 @@ package com.pte.itembank.internal.generation.worker;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
 import com.pte.itembank.internal.generation.live.GenerationLiveFeed;
 import com.pte.itembank.internal.generation.pipeline.JobClaim;
+import com.pte.itembank.internal.generation.stop.GenerationStop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -36,8 +37,8 @@ public class QuestionGenerationWorker {
     private final String workerId = QuestionGenerationConstants.WORKER_ID_PREFIX + UUID.randomUUID();
     /** Jobs this instance runs right now; never more than the pool has threads. */
     private final AtomicInteger running = new AtomicInteger();
-    /** The task of every job this instance runs, so a cancel request can interrupt it. */
-    private final Map<UUID, FutureTask<Void>> runningJobs = new ConcurrentHashMap<>();
+    /** Every job this instance runs, so a cancel or a pause can stop it. */
+    private final Map<UUID, RunningJob> runningJobs = new ConcurrentHashMap<>();
     private final JobLeaseService leases;
     private final GenerationJobRunner runner;
     private final ThreadPoolTaskExecutor executor;
@@ -67,8 +68,9 @@ public class QuestionGenerationWorker {
             }
             JobClaim claimed = claim.get();
             // Registered before it starts, so a cancel arriving at once finds it and a fast job cannot end first.
-            FutureTask<Void> task = new FutureTask<>(() -> runClaim(claimed), null);
-            runningJobs.put(claimed.jobPublicId(), task);
+            GenerationStop stop = new GenerationStop();
+            FutureTask<Void> task = new FutureTask<>(() -> runClaim(claimed, stop), null);
+            runningJobs.put(claimed.jobPublicId(), new RunningJob(task, stop));
             running.incrementAndGet();
             try {
                 executor.execute(task);
@@ -87,24 +89,45 @@ public class QuestionGenerationWorker {
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onCancelRequested(GenerationCancelRequested request) {
-        FutureTask<Void> task = runningJobs.get(request.jobPublicId());
-        if (task != null) {
-            task.cancel(true);
+        stop(request.jobPublicId());
+    }
+
+    /** Interrupts a job whose batch was paused, after PAUSING is committed; the runner hands it back to waiting. */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onPauseRequested(GenerationPauseRequested request) {
+        stop(request.jobPublicId());
+    }
+
+    /**
+     * The signal first, so no retry, fallback or save goes on and the response being read is closed; then the
+     * interrupt, for a thread that sleeps or waits.
+     */
+    private void stop(UUID jobPublicId) {
+        RunningJob job = runningJobs.get(jobPublicId);
+        if (job != null) {
+            job.stop().request();
+            job.task().cancel(true);
         }
     }
 
-    private void runClaim(JobClaim claim) {
+    private void runClaim(JobClaim claim, GenerationStop stop) {
+        stop.bind();
         try {
+            liveFeed.jobStarted(claim.jobPublicId());
             runner.run(claim);
         } catch (RuntimeException aborted) {
             // The lease lapses and the job is resumed later; the cause is a class name only, never a message.
             LOG.warn("Generation job aborted: jobId={}, errorType={}", claim.jobPublicId(),
                     aborted.getClass().getSimpleName());
         } finally {
+            GenerationStop.unbind();
             // Also after an abort: the watchers reconnect and find the job resumed or ended.
             liveFeed.jobEnded(claim.jobPublicId());
             runningJobs.remove(claim.jobPublicId());
             running.decrementAndGet();
         }
+    }
+
+    private record RunningJob(FutureTask<Void> task, GenerationStop stop) {
     }
 }

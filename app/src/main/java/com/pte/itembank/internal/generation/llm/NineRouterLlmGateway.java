@@ -2,6 +2,7 @@ package com.pte.itembank.internal.generation.llm;
 
 import com.pte.itembank.internal.generation.config.QuestionGenerationProperties;
 import com.pte.itembank.internal.generation.live.GenerationLiveContext;
+import com.pte.itembank.internal.generation.stop.GenerationStop;
 import com.pte.itembank.internal.generation.usage.GenerationUsage;
 import com.pte.itembank.internal.generation.usage.GenerationUsageRecorder;
 import org.slf4j.Logger;
@@ -148,7 +149,7 @@ public class NineRouterLlmGateway implements LlmGateway {
             // The exception message quotes the provider body, so only the status code is used.
             throw new LlmProviderException(classify(failure.getStatusCode().value()));
         } catch (RestClientException failure) {
-            throw new LlmProviderException(LlmFailureType.UNAVAILABLE);
+            throw unavailable();
         }
         String content = extractContent(response);
         JsonNode usage = usage(response);
@@ -180,7 +181,7 @@ public class NineRouterLlmGateway implements LlmGateway {
                         return streamReader.read(reply.getBody(), sink);
                     });
         } catch (RestClientException failure) {
-            throw new LlmProviderException(LlmFailureType.UNAVAILABLE);
+            throw unavailable();
         }
         if (result == null || result.content().isBlank()) {
             throw new LlmProviderException(LlmFailureType.EMPTY_RESPONSE);
@@ -248,7 +249,7 @@ public class NineRouterLlmGateway implements LlmGateway {
         } catch (RestClientResponseException failure) {
             throw new LlmProviderException(classify(failure.getStatusCode().value()));
         } catch (RestClientException failure) {
-            throw new LlmProviderException(LlmFailureType.UNAVAILABLE);
+            throw unavailable();
         }
         byte[] png = decodeImage(response);
         LOG.info("Generation image call ok: model={}, durationMs={}, bytes={}", llm.getImageModel(),
@@ -282,11 +283,18 @@ public class NineRouterLlmGateway implements LlmGateway {
     }
 
     private void pause() {
+        GenerationStop.throwIfRequested();
         try {
             Thread.sleep(llm.getRetryDelay().toMillis());
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
-            throw new LlmProviderException(LlmFailureType.UNAVAILABLE);
+            throw unavailable();
         }
+    }
+
+    /** A call broken by a person's pause or cancel is not an outage: it must not be retried or sent elsewhere. */
+    private static LlmProviderException unavailable() {
+        GenerationStop.throwIfRequested();
+        return new LlmProviderException(LlmFailureType.UNAVAILABLE);
     }
 }

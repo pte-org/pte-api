@@ -121,6 +121,11 @@ final class LiveJob {
     }
 
     /** A finished job is kept a while for late watchers; an unwatched job nothing writes to is dropped too. */
+    /** The job told its watchers it ended; its state is only kept for late watchers. */
+    synchronized boolean isFinished() {
+        return finishedAt != null;
+    }
+
     synchronized boolean isExpired(Instant now) {
         return isExpired(now, GenerationLiveConstants.FINISHED_RETENTION_MS, GenerationLiveConstants.IDLE_RETENTION_MS);
     }

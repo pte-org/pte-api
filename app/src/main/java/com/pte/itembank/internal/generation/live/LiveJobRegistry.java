@@ -44,6 +44,15 @@ class LiveJobRegistry {
         return jobs.computeIfAbsent(jobPublicId, ignored -> new LiveJob(clock.instant()));
     }
 
+    /**
+     * A worker starts (or starts again) the job: a state left from an earlier run that ended is replaced, so a
+     * job resumed after a pause is followed afresh instead of being reported as ended. A live state is kept.
+     */
+    LiveJob start(UUID jobPublicId) {
+        return jobs.compute(jobPublicId,
+                (ignored, current) -> current == null || current.isFinished() ? new LiveJob(clock.instant()) : current);
+    }
+
     void forEach(Consumer<LiveJob> action) {
         jobs.values().forEach(action);
     }

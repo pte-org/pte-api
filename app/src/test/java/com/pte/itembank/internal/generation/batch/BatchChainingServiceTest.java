@@ -230,4 +230,50 @@ class BatchChainingServiceTest {
         verify(jobs).cancelPending(BATCH, NOW, null);
         verify(batches).close(BATCH, BatchStatus.CANCELLED, null, NOW);
     }
+
+    @Test
+    void aChildFinishingWhileTheBatchIsPausingPromotesNothingAndPausesTheBatchOnceNoChildHoldsALease() {
+        batch(BatchStatus.PAUSING, false, 1, 20);
+        finishedChild(JobStatus.COMPLETED, null);
+        when(jobs.existsByBatchIdAndStatusIn(BATCH, JobStatus.LEASED)).thenReturn(false);
+        when(jobs.existsByBatchIdAndStatusIn(BATCH, JobStatus.OPEN)).thenReturn(true);
+
+        service.onChildTerminal(BATCH, JOB);
+
+        verify(jobs, never()).promoteNext(anyLong(), anyInt());
+        verify(batches).markPaused(BATCH, NOW);
+        verify(batches, never()).close(anyLong(), any(), any(), any());
+    }
+
+    @Test
+    void aPausingBatchWithAChildStillStoppingStaysPausing() {
+        when(jobs.existsByBatchIdAndStatusIn(BATCH, JobStatus.LEASED)).thenReturn(true);
+
+        service.onChildPaused(BATCH);
+
+        verify(batches, never()).markPaused(anyLong(), any());
+    }
+
+    @Test
+    void aResumedBatchQueuesItsNextChildren() {
+        when(jobs.countByBatchIdAndStatusIn(BATCH, JobStatus.ACTIVE)).thenReturn(0L);
+        when(jobs.promoteNext(BATCH, PARALLEL)).thenReturn(PARALLEL);
+
+        service.onResumed(BATCH);
+
+        verify(jobs).promoteNext(BATCH, PARALLEL);
+        verify(batches, never()).close(anyLong(), any(), any(), any());
+    }
+
+    @Test
+    void aResumedBatchWithNothingLeftCloses() {
+        batch(BatchStatus.RUNNING, false, 20, 20);
+        when(jobs.countByBatchIdAndStatusIn(BATCH, JobStatus.ACTIVE)).thenReturn(0L);
+        when(jobs.promoteNext(BATCH, PARALLEL)).thenReturn(0);
+        when(jobs.existsByBatchIdAndStatusIn(BATCH, JobStatus.OPEN)).thenReturn(false);
+
+        service.onResumed(BATCH);
+
+        verify(batches).close(BATCH, BatchStatus.COMPLETED, null, NOW);
+    }
 }

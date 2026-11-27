@@ -1,5 +1,6 @@
 package com.pte.itembank.internal.generation.llm;
 
+import com.pte.itembank.internal.generation.stop.GenerationStop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,6 +44,7 @@ public class FallbackLlmGateway implements LlmGateway {
         try {
             return work.apply(primary);
         } catch (LlmProviderException failure) {
+            GenerationStop.throwIfRequested(); // a stopped job asks nobody else
             LOG.warn("Primary generation provider failed, using the fallback: call={}, code={}", call,
                     failure.getMessage());
             return work.apply(fallback);

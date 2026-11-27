@@ -8,6 +8,7 @@ import com.pte.itembank.internal.generation.pipeline.GenerationItemStateService;
 import com.pte.itembank.internal.generation.pipeline.GenerationPipeline;
 import com.pte.itembank.internal.generation.pipeline.ItemOutcome;
 import com.pte.itembank.internal.generation.pipeline.JobClaim;
+import com.pte.itembank.internal.generation.stop.GenerationStop;
 import com.pte.shared.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -205,5 +206,93 @@ class GenerationJobRunnerTest {
         verify(leases).finish(claim, null, null);
         verify(leases, never()).finish(eq(claim), eq(JobStatus.FAILED), any());
         verify(leases, never()).finish(eq(claim), eq(JobStatus.CANCELLED), isNull());
+    }
+
+    @Test
+    void aPauseInterruptHandsTheJobBackInsteadOfCancellingIt() {
+        when(pipeline.runItem(eq(claim), eq(admin), eq(0), any())).thenAnswer(call -> {
+            Thread.currentThread().interrupt(); // what a pause does to the provider call in progress
+            return ItemOutcome.FAILED;
+        });
+        when(itemState.stopRequested(claim)).thenReturn(ItemOutcome.PAUSED);
+
+        runner.run(claim);
+
+        verify(leases).release(claim);
+        verify(itemState, never()).cancelOpen(claim);
+        verify(leases, never()).finish(any(), any(), any());
+        verify(pipeline, never()).runItem(eq(claim), eq(admin), eq(1), any());
+        assertThat(Thread.currentThread().isInterrupted()).isFalse();
+    }
+
+    @Test
+    void aCancelThatWonOverAPauseStillCancels() {
+        when(pipeline.runItem(eq(claim), eq(admin), eq(0), any())).thenAnswer(call -> {
+            Thread.currentThread().interrupt();
+            return ItemOutcome.FAILED;
+        });
+        when(itemState.stopRequested(claim)).thenReturn(ItemOutcome.CANCELLED);
+
+        runner.run(claim);
+
+        verify(itemState).cancelOpen(claim);
+        verify(leases).finish(claim, JobStatus.CANCELLED, null);
+        verify(leases, never()).release(claim);
+    }
+
+    @Test
+    void aPauseSeenBetweenItemsReleasesTheJobWithoutAnotherCall() {
+        when(leases.leaseState(claim)).thenReturn(LeaseState.HELD, LeaseState.PAUSE_REQUESTED);
+
+        runner.run(claim);
+
+        verify(pipeline).runItem(eq(claim), eq(admin), eq(0), any());
+        verify(pipeline, never()).runItem(eq(claim), eq(admin), eq(1), any());
+        verify(leases).release(claim);
+        verify(leases, never()).finish(any(), any(), any());
+    }
+
+    @Test
+    void aPauseNoticedByThePipelineReleasesTheJob() {
+        when(pipeline.runItem(eq(claim), eq(admin), eq(0), any())).thenReturn(ItemOutcome.PAUSED);
+
+        runner.run(claim);
+
+        verify(leases).release(claim);
+        verify(leases, never()).finish(any(), any(), any());
+    }
+
+    @Test
+    void aStopThePipelineReportedIsSettledFromTheJobEvenWithoutAnInterrupt() {
+        // A library cleared the interrupt flag on the way; the stop outcome still stops the job.
+        when(pipeline.runItem(eq(claim), eq(admin), eq(0), any())).thenReturn(ItemOutcome.STOPPED);
+        when(itemState.stopRequested(claim)).thenReturn(ItemOutcome.PAUSED);
+
+        runner.run(claim);
+
+        verify(leases).release(claim);
+        verify(pipeline, never()).runItem(eq(claim), eq(admin), eq(1), any());
+        verify(leases, never()).finish(any(), any(), any());
+    }
+
+    @Test
+    void aStopSignalSeenAfterASavedItemStillStopsTheJob() {
+        GenerationStop stop = new GenerationStop();
+        stop.bind();
+        try {
+            when(pipeline.runItem(eq(claim), eq(admin), eq(0), any())).thenAnswer(call -> {
+                stop.request();
+                return ItemOutcome.SAVED;
+            });
+            when(itemState.stopRequested(claim)).thenReturn(ItemOutcome.CANCELLED);
+
+            runner.run(claim);
+
+            verify(itemState).cancelOpen(claim);
+            verify(leases).finish(claim, JobStatus.CANCELLED, null);
+            verify(pipeline, never()).runItem(eq(claim), eq(admin), eq(1), any());
+        } finally {
+            GenerationStop.unbind();
+        }
     }
 }
