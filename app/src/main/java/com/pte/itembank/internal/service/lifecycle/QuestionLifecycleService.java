@@ -12,6 +12,7 @@ import com.pte.itembank.internal.constant.ItembankConstants;
 import com.pte.itembank.internal.exception.InvalidQuestionStatusTransitionException;
 import com.pte.itembank.internal.exception.QuestionNotFoundException;
 import com.pte.itembank.internal.exception.QuestionVersionConflictException;
+import com.pte.itembank.internal.generation.draft.GapMarkers;
 import com.pte.itembank.internal.mapper.QuestionMapper;
 import com.pte.itembank.internal.repository.QuestionRepository;
 import com.pte.itembank.internal.service.ItembankAccessPolicy;
@@ -241,7 +242,7 @@ public class QuestionLifecycleService {
     private void applyContent(Question question, String promptText, UUID audioPromptRef,
             UUID imagePromptRef, String referenceAnswerText, String correctAnswerText, Integer minWordCount,
             Integer maxWordCount, List<OptionRequest> options) {
-        question.setPromptText(promptText);
+        question.setPromptText(GapMarkers.forTask(question.getTaskTypeKey(), promptText));
         question.setAudioPromptRef(audioPromptRef);
         question.setImagePromptRef(imagePromptRef);
         question.setReferenceAnswerText(referenceAnswerText);

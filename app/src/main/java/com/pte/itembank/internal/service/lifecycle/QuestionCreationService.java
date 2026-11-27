@@ -13,6 +13,7 @@ import com.pte.itembank.dto.request.OptionRequest;
 import com.pte.itembank.dto.response.QuestionResponse;
 import com.pte.itembank.internal.constant.ItembankConstants;
 import com.pte.itembank.internal.exception.QuestionValidationException;
+import com.pte.itembank.internal.generation.draft.GapMarkers;
 import com.pte.itembank.internal.mapper.QuestionMapper;
 import com.pte.itembank.internal.repository.QuestionRepository;
 import com.pte.itembank.internal.service.ItembankAccessPolicy;
@@ -87,7 +88,7 @@ public class QuestionCreationService {
         question.setRevisionNumber(1);
         question.setCurrent(true);
         question.setCefrLevel(CefrLevels.parse(request.cefrLevel()));
-        question.setPromptText(request.promptText());
+        question.setPromptText(GapMarkers.forTask(taskTypeKey, request.promptText()));
         question.setAudioPromptRef(request.audioPromptRef());
         question.setImagePromptRef(request.imagePromptRef());
         question.setReferenceAnswerText(request.referenceAnswerText());

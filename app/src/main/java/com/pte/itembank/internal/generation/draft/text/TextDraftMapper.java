@@ -8,7 +8,9 @@ import com.pte.itembank.internal.generation.draft.ItemDraft;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Maps text-based ItemDraft types to CreateQuestionRequest.
@@ -99,6 +101,13 @@ public class TextDraftMapper {
         List<OptionRequest> options = new ArrayList<>();
         int orderIndex = 0;
 
+        // One word bank serves every gap, so a model that repeats the same extra words under each gap must not put
+        // them in the bank once per gap, nor repeat a word that is already the right answer of some gap.
+        Set<String> inBank = new HashSet<>();
+        for (var slot : draft.slots()) {
+            inBank.add(bankKey(slot.answer()));
+        }
+
         for (int blankIndex = 0; blankIndex < draft.slots().size(); blankIndex++) {
             var slot = draft.slots().get(blankIndex);
 
@@ -107,6 +116,9 @@ public class TextDraftMapper {
             orderIndex++;
 
             for (String distractor : slot.distractors()) {
+                if (!inBank.add(bankKey(distractor))) {
+                    continue;
+                }
                 options.add(new OptionRequest(distractor, false, orderIndex, null, null));
                 orderIndex++;
             }
@@ -123,6 +135,10 @@ public class TextDraftMapper {
                 pool.name(),
                 null, null,
                 cefr.name());
+    }
+
+    private static String bankKey(String word) {
+        return word == null ? "" : word.strip().toLowerCase(java.util.Locale.ROOT);
     }
 
     public CreateQuestionRequest mapReorder(ItemDraft.ReorderDraft draft, CefrLevel cefr, QuestionPool pool) {

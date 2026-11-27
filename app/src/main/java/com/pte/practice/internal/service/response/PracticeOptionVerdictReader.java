@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -21,6 +22,8 @@ import java.util.Set;
  */
 public final class PracticeOptionVerdictReader {
 
+    private static final String TYPE_IN_RENDERER = "FILL_IN_THE_BLANKS_TYPE_IN_V1";
+    private static final String BLANKS = "blanks";
     private static final String SELECTED_OPTION = "selectedOption";
     private static final String SELECTED_OPTIONS = "selectedOptions";
     private static final String PLACEMENTS = "placements";
@@ -40,6 +43,9 @@ public final class PracticeOptionVerdictReader {
 
     public static List<OptionVerdict> read(JsonMapper jsonMapper, PracticeResponse item) {
         String rendererKey = item.getRendererKey();
+        if (TYPE_IN_RENDERER.equals(rendererKey)) {
+            return typeInVerdicts(jsonMapper, item);
+        }
         if (rendererKey == null || item.getSavedPayload() == null || item.getObjectiveOptionsJson() == null) {
             return List.of();
         }
@@ -60,6 +66,49 @@ public final class PracticeOptionVerdictReader {
         }
         verdicts.sort(Comparator.comparingInt(OptionVerdict::orderIndex));
         return verdicts;
+    }
+
+    /**
+     * A type-in answer has no options: the key is the list of right words, one per gap, and the answer is the words
+     * typed, in gap order. Each gap gets a verdict for its right word (picked when the typed word matches it, under the
+     * same trimming and lower-casing the scorer applies) and, when a different word was typed, a wrong verdict for that
+     * word, so the screen can mark each gap and name the word that belonged there.
+     */
+    private static List<OptionVerdict> typeInVerdicts(JsonMapper jsonMapper, PracticeResponse item) {
+        if (item.getSavedPayload() == null || item.getCorrectAnswerText() == null) {
+            return List.of();
+        }
+        JsonNode payload;
+        JsonNode key;
+        try {
+            payload = jsonMapper.readTree(item.getSavedPayload());
+            key = jsonMapper.readTree(item.getCorrectAnswerText());
+        } catch (JacksonException ex) {
+            return List.of();
+        }
+        if (payload == null || key == null || !key.isArray() || key.isEmpty() || !payload.path(BLANKS).isArray()) {
+            return List.of();
+        }
+        JsonNode typed = payload.path(BLANKS);
+        List<OptionVerdict> verdicts = new ArrayList<>();
+        for (int gap = 0; gap < key.size(); gap++) {
+            String right = key.get(gap).asText("").strip();
+            if (right.isEmpty()) {
+                return List.of();
+            }
+            String written = gap < typed.size() ? typed.get(gap).asText("").strip() : "";
+            boolean matches = normalizeWord(right).equals(normalizeWord(written));
+            verdicts.add(new OptionVerdict(gap, matches, true, gap, right));
+            if (!matches && !written.isEmpty()) {
+                verdicts.add(new OptionVerdict(key.size() + gap, true, false, gap, written));
+            }
+        }
+        verdicts.sort(Comparator.comparingInt(OptionVerdict::orderIndex));
+        return verdicts;
+    }
+
+    private static String normalizeWord(String word) {
+        return word.strip().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 
     private static List<OptionVerdict> verdictsOf(String rendererKey, JsonNode payload, JsonNode key) {
