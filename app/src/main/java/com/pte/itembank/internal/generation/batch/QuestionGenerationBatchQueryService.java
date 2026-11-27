@@ -1,7 +1,9 @@
 package com.pte.itembank.internal.generation.batch;
 
 import com.pte.itembank.internal.generation.batch.dto.GenerationBatchResponse;
+import com.pte.itembank.internal.generation.config.GenerationLimits;
 import com.pte.itembank.internal.generation.constant.QuestionGenerationConstants;
+import com.pte.itembank.internal.generation.domain.BatchStatus;
 import com.pte.itembank.internal.generation.domain.ItemStage;
 import com.pte.itembank.internal.generation.domain.QuestionGenerationBatch;
 import com.pte.itembank.internal.generation.exception.GenerationBatchNotFoundException;
@@ -18,6 +20,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -30,9 +34,11 @@ public class QuestionGenerationBatchQueryService {
     private final GenerationBatchRepository batches;
     private final GenerationJobRepository jobs;
     private final GenerationJobItemRepository items;
+    private final GenerationLimits limits;
 
     public QuestionGenerationBatchQueryService(GenerationBatchRepository batches, GenerationJobRepository jobs,
-                                               GenerationJobItemRepository items) {
+                                               GenerationJobItemRepository items, GenerationLimits limits) {
+        this.limits = limits;
         this.batches = batches;
         this.jobs = jobs;
         this.items = items;
@@ -60,7 +66,8 @@ public class QuestionGenerationBatchQueryService {
         for (Object[] row : items.countStagesByBatch(batchId)) {
             stages.put((ItemStage) row[0], ((Number) row[1]).longValue());
         }
-        return GenerationBatchResponse.detail(batch, jobs.findByBatchIdOrderByBatchSeqAsc(batchId), stages);
+        return GenerationBatchResponse.detail(batch, jobs.findByBatchIdOrderByBatchSeqAsc(batchId), stages)
+                .withPauseExpiresAt(pauseExpiresAt(batch));
     }
 
     /** Newest first, without children. {@code mine} narrows a reviewer's list; staff always get only their own. */
@@ -73,9 +80,19 @@ public class QuestionGenerationBatchQueryService {
         Page<QuestionGenerationBatch> result = GenerationAccessPolicy.seesAllJobs(caller) && !mine
                 ? batches.findByDeletedFalse(pageRequest)
                 : batches.findByRequestedByUserPublicIdAndDeletedFalse(caller.userId(), pageRequest);
-        List<GenerationBatchResponse> data = result.getContent().stream().map(GenerationBatchResponse::summary)
+        List<GenerationBatchResponse> data = result.getContent().stream().map(batch -> GenerationBatchResponse.summary(batch).withPauseExpiresAt(pauseExpiresAt(batch)))
                 .toList();
         return new PagedResult<>(data, new PageMeta(result.getNumber(), result.getSize(), result.getTotalElements(),
                 result.getTotalPages(), result.isFirst(), result.isLast(), result.hasNext(), result.hasPrevious()));
+    }
+
+    /** The expiry is read now, so a changed setting applies to a batch already paused. */
+    private Instant pauseExpiresAt(QuestionGenerationBatch batch) {
+        int hours = limits.pausedBatchExpiryHours();
+        if (batch.getStatus() != BatchStatus.PAUSED || batch.getPausedAt() == null
+                || GenerationLimits.isUnlimited(hours)) {
+            return null;
+        }
+        return batch.getPausedAt().plus(Duration.ofHours(hours));
     }
 }

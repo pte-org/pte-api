@@ -20,7 +20,14 @@ public record GenerationBatchResponse(
         UUID publicId, String pool, String status, int totalRequested, int succeededCount, int failedCount,
         int cancelledCount, int openCount, boolean cancelRequested, String failureCode, UUID currentJobPublicId,
         Instant createdAt, Instant startedAt, Instant finishedAt, List<BatchRow> rows,
-        List<GenerationBatchChildResponse> children) {
+        List<GenerationBatchChildResponse> children, Instant pausedAt, Instant pauseExpiresAt) {
+
+    /** When a paused batch will be cancelled if nobody resumes it; null while it runs or when paused batches are kept. */
+    public GenerationBatchResponse withPauseExpiresAt(Instant expiresAt) {
+        return new GenerationBatchResponse(publicId, pool, status, totalRequested, succeededCount, failedCount,
+                cancelledCount, openCount, cancelRequested, failureCode, currentJobPublicId, createdAt, startedAt,
+                finishedAt, rows, children, pausedAt, expiresAt);
+    }
 
     /** List entry: stored counters, no children. */
     public static GenerationBatchResponse summary(QuestionGenerationBatch batch) {
@@ -44,7 +51,7 @@ public record GenerationBatchResponse(
         return new GenerationBatchResponse(batch.getPublicId(), batch.getPool().name(), batch.getStatus().name(),
                 batch.getTotalRequested(), succeeded, failed, cancelled, open, batch.isCancelRequested(),
                 batch.getFailureCode(), current, batch.getCreatedAt(), batch.getStartedAt(), batch.getFinishedAt(),
-                batch.getRows(), children);
+                batch.getRows(), children, batch.getPausedAt(), null);
     }
 
     /** The child a live view should follow: the one a worker holds, else the one waiting to be claimed. */

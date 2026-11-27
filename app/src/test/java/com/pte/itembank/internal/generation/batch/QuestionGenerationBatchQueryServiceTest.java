@@ -36,7 +36,8 @@ class QuestionGenerationBatchQueryServiceTest {
     private final GenerationJobRepository jobs = mock(GenerationJobRepository.class);
     private final GenerationJobItemRepository items = mock(GenerationJobItemRepository.class);
     private final QuestionGenerationBatchQueryService service =
-            new QuestionGenerationBatchQueryService(batches, jobs, items);
+            new QuestionGenerationBatchQueryService(batches, jobs, items,
+                    org.mockito.Mockito.mock(com.pte.itembank.internal.generation.config.GenerationLimits.class));
     private final CurrentUser staffA = new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_STAFF"));
     private final CurrentUser staffB = new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_STAFF"));
     private final CurrentUser manager = new CurrentUser(UUID.randomUUID(), null, List.of("ACADEMIC_MANAGER"));
