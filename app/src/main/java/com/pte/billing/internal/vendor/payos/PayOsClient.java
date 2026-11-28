@@ -165,9 +165,14 @@ public class PayOsClient {
         return canonicalFields(fields);
     }
 
+    /**
+     * PayOS signs the fields in alphabetical order. The order is fixed here, not left to the caller's map: an
+     * unordered map (such as {@code Map.of}) iterates differently on each JVM start, so the signature was right on
+     * some starts and refused on others.
+     */
     private String canonicalFields(Map<String, String> fields) {
         List<String> pairs = new ArrayList<>();
-        fields.forEach((key, value) -> pairs.add(key + "=" + value));
+        new TreeMap<>(fields).forEach((key, value) -> pairs.add(key + "=" + value));
         return String.join("&", pairs);
     }
 
